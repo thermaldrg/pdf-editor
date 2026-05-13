@@ -7,7 +7,7 @@ const ELECTRON_OUT_DIR: string = 'dist-electron';
 const isElectronBuild: boolean = process.env.ELECTRON === '1';
 
 export default defineConfig({
-  base: './',
+  base: isElectronBuild ? './' : '/',
   build: {
     target: 'es2022',
     rollupOptions: {

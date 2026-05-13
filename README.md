@@ -73,6 +73,28 @@ static host (Vercel, Netlify, GitHub Pages, S3 + CloudFront, nginx, etc.).
 
 ---
 
+## Deploy to Vercel
+
+The repo ships a `vercel.json` that pins the framework, build command,
+output directory, SPA rewrite, and long-term caching for hashed assets.
+
+The recommended path is to import the repo from the Vercel dashboard — no
+extra configuration is needed because `vercel.json` declares everything.
+
+If you prefer the CLI:
+
+```bash
+bun add -g vercel
+vercel             # preview deployment
+vercel --prod      # production deployment
+```
+
+Vite's `base` is `/` for web builds and `./` for the Electron build, so the
+same `vite.config.ts` serves both targets correctly. The Electron flow under
+`bun run build:electron` is unaffected.
+
+---
+
 ## Desktop app (Electron, macOS)
 
 The same React renderer is packaged as a native macOS app. Bun is used for
