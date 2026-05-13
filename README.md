@@ -83,6 +83,8 @@ extra configuration is needed because `vercel.json` declares everything.
 
 If you prefer the CLI:
 
+--
+
 ```bash
 bun add -g vercel
 vercel             # preview deployment
