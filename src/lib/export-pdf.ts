@@ -6,7 +6,9 @@ import type {
   SignatureAnnotation,
   TextAnnotation,
 } from '../types/annotation';
+import type { FormFieldValues } from '../types/form-values';
 import type { PageOperation } from '../types/page-operation';
+import { applyFormFieldValues } from './apply-form-field-values';
 import { hexToRgb } from './hex-to-rgb';
 import {
   getContentRotationDegrees,
@@ -16,21 +18,25 @@ import type { UnderlyingPageSizePt } from './export-pdf-geometry';
 import { getShapeDefinition } from './shape-geometry';
 
 const FULL_TURN: number = 360;
+const EMPTY_FORM_VALUES: FormFieldValues = new Map();
 
 interface ExportPdfArgs {
   readonly sourceBytes: ArrayBuffer;
   readonly annotations: ReadonlyArray<Annotation>;
   readonly pageOperations: ReadonlyArray<PageOperation>;
+  readonly formValues?: FormFieldValues;
 }
 
 export async function exportPdf({
   sourceBytes,
   annotations,
   pageOperations,
+  formValues = EMPTY_FORM_VALUES,
 }: ExportPdfArgs): Promise<Uint8Array> {
   const sourceDocument: PDFDocument = await PDFDocument.load(
     sourceBytes.slice(0),
   );
+  applyFormFieldValues({ document: sourceDocument, values: formValues });
   const outputDocument: PDFDocument = await PDFDocument.create();
   const font: PDFFont = await outputDocument.embedFont(StandardFonts.Helvetica);
   const sourceIndices: number[] = pageOperations.map((op) => op.originalIndex);

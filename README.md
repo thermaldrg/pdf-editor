@@ -21,6 +21,9 @@ Ships as both a **web app** and a native **macOS desktop app** (Electron).
 - Drop **shapes**: tick, cross, dash (great for forms)
 - **Drag, resize, and delete** any annotation
 - **Zoom** in and out with a clear page-fit reset
+- **Fill native PDF form fields** (AcroForm): text inputs, checkboxes, radio
+  groups, dropdowns, and list boxes — values are detected from the source PDF,
+  edited in-place, and baked into the exported file
 
 ### Page operations
 
@@ -232,11 +235,13 @@ src/
 
   lib/
     load-pdf.ts            # pdfjs-dist loader + password detection
+    load-form-fields.ts    # parses AcroForm widgets per page
     decrypt-pdf.ts         # unlock encrypted PDFs
     render-pdf-page.ts
     pdf-worker.ts          # configures pdf.js worker
     export-pdf.ts          # pdf-lib stamping
     export-pdf-geometry.ts # rotation + coordinate helpers
+    apply-form-field-values.ts # writes filled values into the AcroForm
     rotation-transforms.ts
     shape-geometry.ts
     merge-pdfs.ts
@@ -252,6 +257,8 @@ src/
 
   types/
     annotation.ts
+    form-field.ts
+    form-values.ts
     pdf.ts
     placement.ts
     page-operation.ts

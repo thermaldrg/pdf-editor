@@ -1,6 +1,8 @@
 import { getDocument } from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { ensurePdfWorker } from './pdf-worker';
+import { loadFormFields } from './load-form-fields';
+import type { FormField } from '../types/form-field';
 import type { LoadedPdf, PdfPageSize } from '../types/pdf';
 
 interface LoadPdfArgs {
@@ -30,11 +32,13 @@ export async function loadPdf({ file }: LoadPdfArgs): Promise<LoadedPdf> {
   const sourceBytes: ArrayBuffer = await file.arrayBuffer();
   const document: PDFDocumentProxy = await openWithPdfJs(sourceBytes);
   const pageSizes: PdfPageSize[] = await collectPageSizes(document);
+  const formFields: ReadonlyArray<FormField> = await loadFormFields(document);
   return {
     fileName: file.name,
     sourceBytes,
     document,
     pageSizes,
+    formFields,
   };
 }
 

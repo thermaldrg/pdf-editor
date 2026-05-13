@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { FormField } from './form-field';
 
 export interface PdfPageSize {
   readonly width: number;
@@ -10,4 +11,5 @@ export interface LoadedPdf {
   readonly sourceBytes: ArrayBuffer;
   readonly document: PDFDocumentProxy;
   readonly pageSizes: ReadonlyArray<PdfPageSize>;
+  readonly formFields: ReadonlyArray<FormField>;
 }

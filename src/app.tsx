@@ -42,6 +42,7 @@ const PasswordPromptModal = lazy(() =>
 import type { ExportCompression } from "./components/export-menu";
 import type { ToolbarTool } from "./components/toolbar";
 import { useAnnotations } from "./hooks/use-annotations";
+import { useFormValues } from "./hooks/use-form-values";
 import { usePageOperations } from "./hooks/use-page-operations";
 import { usePdfDocument } from "./hooks/use-pdf-document";
 import { useSavedSignatures } from "./hooks/use-saved-signatures";
@@ -60,6 +61,7 @@ import {
   getShapeDefinition,
 } from "./lib/shape-geometry";
 import type { Annotation, ShapeKind } from "./types/annotation";
+import type { FormField } from "./types/form-field";
 import type { DownloadResult } from "./types/download-result";
 import type {
   PendingPlacement,
@@ -81,6 +83,8 @@ const DEFAULT_TEXT_COLOR: string = "#0f172a";
 const DEFAULT_DATE_WIDTH: number = 0.16;
 
 const DEFAULT_SIGNATURE_WIDTH: number = 0.25;
+
+const EMPTY_FORM_FIELDS: ReadonlyArray<FormField> = [];
 
 export function App() {
   const {
@@ -117,6 +121,16 @@ export function App() {
     saveSignature,
     removeSignature,
   } = useSavedSignatures();
+  const formFields: ReadonlyArray<FormField> = pdf?.formFields ?? EMPTY_FORM_FIELDS;
+  const {
+    values: formValues,
+    isDirty: hasFormEdits,
+    setText: setFormText,
+    setCheckbox: setFormCheckbox,
+    setRadio: setFormRadio,
+    setDropdown: setFormDropdown,
+    setListbox: setFormListbox,
+  } = useFormValues({ fields: formFields });
   const [zoom, setZoom] = useState<number>(DEFAULT_ZOOM);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [pendingPlacement, setPendingPlacement] =
@@ -150,7 +164,8 @@ export function App() {
     [pageOperations, pdf],
   );
 
-  const canExport: boolean = annotations.length > 0 || hasPageEdits;
+  const canExport: boolean =
+    annotations.length > 0 || hasPageEdits || hasFormEdits;
 
   useEffect(() => {
     resetForPageCount(pdf?.pageSizes.length ?? 0);
@@ -284,6 +299,7 @@ export function App() {
           sourceBytes: pdf.sourceBytes,
           annotations,
           pageOperations,
+          formValues,
         });
         if (compression === "none") {
           deliverExportDownload({
@@ -307,7 +323,7 @@ export function App() {
         setExportingCompression(null);
       }
     },
-    [annotations, pageOperations, pdf],
+    [annotations, formValues, pageOperations, pdf],
   );
 
   const handleOpenProtect = useCallback((): void => {
@@ -335,6 +351,7 @@ export function App() {
           sourceBytes: pdf.sourceBytes,
           annotations,
           pageOperations,
+          formValues,
         });
         const compressed: CompressedExport = await maybeCompressExport({
           bytes: exportedBytes,
@@ -362,7 +379,7 @@ export function App() {
         setIsProtecting(false);
       }
     },
-    [annotations, pageOperations, pdf],
+    [annotations, formValues, pageOperations, pdf],
   );
 
   const handleOpenMerge = useCallback((): void => {
@@ -505,6 +522,7 @@ export function App() {
             pageOperations={pageOperations}
             zoom={zoom}
             annotations={annotations}
+            formValues={formValues}
             selectedId={selectedId}
             pendingPlacement={pendingPlacement}
             isSidebarOpen={isSidebarOpen}
@@ -516,6 +534,11 @@ export function App() {
             onRemovePage={handleRemovePage}
             onMovePageUp={movePageUp}
             onMovePageDown={movePageDown}
+            onSetFormText={setFormText}
+            onSetFormCheckbox={setFormCheckbox}
+            onSetFormRadio={setFormRadio}
+            onSetFormDropdown={setFormDropdown}
+            onSetFormListbox={setFormListbox}
           />
         ) : (
           <EmptyState

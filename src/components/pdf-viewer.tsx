@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LoadedPdf } from '../types/pdf';
 import type { Annotation } from '../types/annotation';
+import type { FormField } from '../types/form-field';
+import type { FormFieldValues } from '../types/form-values';
 import type { PageOperation } from '../types/page-operation';
 import type { PendingPlacement } from '../types/placement';
 import { PageSidebar } from './page-sidebar';
@@ -11,6 +13,7 @@ interface PdfViewerProps {
   readonly pageOperations: ReadonlyArray<PageOperation>;
   readonly zoom: number;
   readonly annotations: ReadonlyArray<Annotation>;
+  readonly formValues: FormFieldValues;
   readonly selectedId: string | null;
   readonly pendingPlacement: PendingPlacement | null;
   readonly isSidebarOpen: boolean;
@@ -26,6 +29,17 @@ interface PdfViewerProps {
   readonly onRemovePage: (displayIndex: number) => void;
   readonly onMovePageUp: (displayIndex: number) => void;
   readonly onMovePageDown: (displayIndex: number) => void;
+  readonly onSetFormText: (fieldName: string, value: string) => void;
+  readonly onSetFormCheckbox: (fieldName: string, value: boolean) => void;
+  readonly onSetFormRadio: (
+    fieldName: string,
+    value: string | null,
+  ) => void;
+  readonly onSetFormDropdown: (fieldName: string, value: string) => void;
+  readonly onSetFormListbox: (
+    fieldName: string,
+    values: ReadonlyArray<string>,
+  ) => void;
 }
 
 const SCROLL_TOP_OFFSET_PX: number = 120;
@@ -36,6 +50,7 @@ export function PdfViewer({
   pageOperations,
   zoom,
   annotations,
+  formValues,
   selectedId,
   pendingPlacement,
   isSidebarOpen,
@@ -47,12 +62,21 @@ export function PdfViewer({
   onRemovePage,
   onMovePageUp,
   onMovePageDown,
+  onSetFormText,
+  onSetFormCheckbox,
+  onSetFormRadio,
+  onSetFormDropdown,
+  onSetFormListbox,
 }: PdfViewerProps) {
   const pageNodesRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const [activeDisplayIndex, setActiveDisplayIndex] = useState<number>(0);
   const annotationsByPage = useMemo(
     () => groupAnnotationsByPage(annotations),
     [annotations],
+  );
+  const formFieldsByPage = useMemo(
+    () => groupFormFieldsByPage(pdf.formFields),
+    [pdf.formFields],
   );
   const pageCount: number = pageOperations.length;
   const clampedActiveIndex: number =
@@ -129,6 +153,10 @@ export function PdfViewer({
                 rotation={operation.rotation}
                 zoom={zoom}
                 annotations={annotationsByPage.get(operation.originalIndex) ?? []}
+                formFields={
+                  formFieldsByPage.get(operation.originalIndex) ?? EMPTY_FIELDS
+                }
+                formValues={formValues}
                 selectedId={selectedId}
                 pendingPlacement={pendingPlacement}
                 onSelect={onSelect}
@@ -139,6 +167,11 @@ export function PdfViewer({
                 onRemovePage={onRemovePage}
                 onMovePageUp={onMovePageUp}
                 onMovePageDown={onMovePageDown}
+                onSetFormText={onSetFormText}
+                onSetFormCheckbox={onSetFormCheckbox}
+                onSetFormRadio={onSetFormRadio}
+                onSetFormDropdown={onSetFormDropdown}
+                onSetFormListbox={onSetFormListbox}
               />
             </PageSlot>
           );
@@ -208,6 +241,20 @@ function groupAnnotationsByPage(
     const list: Annotation[] = map.get(annotation.pageIndex) ?? [];
     list.push(annotation);
     map.set(annotation.pageIndex, list);
+  }
+  return map;
+}
+
+const EMPTY_FIELDS: ReadonlyArray<FormField> = [];
+
+function groupFormFieldsByPage(
+  fields: ReadonlyArray<FormField>,
+): ReadonlyMap<number, ReadonlyArray<FormField>> {
+  const map: Map<number, FormField[]> = new Map();
+  for (const field of fields) {
+    const list: FormField[] = map.get(field.pageIndex) ?? [];
+    list.push(field);
+    map.set(field.pageIndex, list);
   }
   return map;
 }

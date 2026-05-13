@@ -9,6 +9,8 @@ import {
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { Annotation } from "../types/annotation";
+import type { FormField } from "../types/form-field";
+import type { FormFieldValues } from "../types/form-values";
 import type {
   PendingPlacement,
   PendingPlacementKind,
@@ -17,6 +19,7 @@ import type { PageRotation } from "../types/page-operation";
 import { renderPdfPage } from "../lib/render-pdf-page";
 import type { RenderPdfPageHandle } from "../lib/render-pdf-page";
 import { useInView } from "../hooks/use-in-view";
+import { FormFieldOverlay } from "./form-field-overlay";
 import { PageToolbar } from "./page-toolbar";
 import { ShapeAnnotationRenderer } from "./shape-annotation-renderer";
 import { SignatureAnnotationRenderer } from "./signature-annotation-renderer";
@@ -36,6 +39,8 @@ interface PdfPageProps {
   readonly rotation: PageRotation;
   readonly zoom: number;
   readonly annotations: ReadonlyArray<Annotation>;
+  readonly formFields: ReadonlyArray<FormField>;
+  readonly formValues: FormFieldValues;
   readonly selectedId: string | null;
   readonly pendingPlacement: PendingPlacement | null;
   readonly onSelect: (id: string | null) => void;
@@ -50,6 +55,17 @@ interface PdfPageProps {
   readonly onRemovePage: (displayIndex: number) => void;
   readonly onMovePageUp: (displayIndex: number) => void;
   readonly onMovePageDown: (displayIndex: number) => void;
+  readonly onSetFormText: (fieldName: string, value: string) => void;
+  readonly onSetFormCheckbox: (fieldName: string, value: boolean) => void;
+  readonly onSetFormRadio: (
+    fieldName: string,
+    value: string | null,
+  ) => void;
+  readonly onSetFormDropdown: (fieldName: string, value: string) => void;
+  readonly onSetFormListbox: (
+    fieldName: string,
+    values: ReadonlyArray<string>,
+  ) => void;
 }
 
 function PdfPageImpl({
@@ -61,6 +77,8 @@ function PdfPageImpl({
   rotation,
   zoom,
   annotations,
+  formFields,
+  formValues,
   selectedId,
   pendingPlacement,
   onSelect,
@@ -71,6 +89,11 @@ function PdfPageImpl({
   onRemovePage,
   onMovePageUp,
   onMovePageDown,
+  onSetFormText,
+  onSetFormCheckbox,
+  onSetFormRadio,
+  onSetFormDropdown,
+  onSetFormListbox,
 }: PdfPageProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -247,6 +270,25 @@ function PdfPageImpl({
             );
           })}
         </div>
+        {formFields.length > 0 && (
+          <div
+            className="pointer-events-none absolute inset-0"
+            aria-hidden={pendingPlacement !== null}
+          >
+            <FormFieldOverlay
+              fields={formFields}
+              values={formValues}
+              rotation={rotation}
+              pagePixelSize={pixelSize}
+              isDisabled={pendingPlacement !== null}
+              onSetText={onSetFormText}
+              onSetCheckbox={onSetFormCheckbox}
+              onSetRadio={onSetFormRadio}
+              onSetDropdown={onSetFormDropdown}
+              onSetListbox={onSetFormListbox}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
