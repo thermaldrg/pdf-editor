@@ -1,0 +1,73 @@
+name: Bug report
+description: Something is broken or behaving unexpectedly.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. The more specific you can be, the faster it
+        can be fixed.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear, concise description of the bug.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Step-by-step what you did. Include a sample PDF if relevant (please redact anything sensitive).
+      placeholder: |
+        1. Open a PDF
+        2. Add a signature on page 2
+        3. Rotate page 2 by 90 degrees
+        4. Export
+        5. Observe the signature ends up on page 1
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      multiple: false
+      options:
+        - Web (browser)
+        - Desktop (Electron)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version / commit
+      placeholder: "0.1.0 or commit sha"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS and browser
+      placeholder: "macOS 15.3, Chrome 132 / Electron 41"
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console / log output
+      description: Paste any errors or warnings from the browser dev tools or Electron log.
+      render: shell

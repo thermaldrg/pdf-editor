@@ -1,7 +1,7 @@
 import {
+  memo,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -13,10 +13,14 @@ import type {
   PendingPlacement,
   PendingPlacementKind,
 } from "../types/placement";
+import type { PageRotation } from "../types/page-operation";
 import { renderPdfPage } from "../lib/render-pdf-page";
-import { TextAnnotationRenderer } from "./text-annotation-renderer";
-import { SignatureAnnotationRenderer } from "./signature-annotation-renderer";
+import type { RenderPdfPageHandle } from "../lib/render-pdf-page";
+import { useInView } from "../hooks/use-in-view";
+import { PageToolbar } from "./page-toolbar";
 import { ShapeAnnotationRenderer } from "./shape-annotation-renderer";
+import { SignatureAnnotationRenderer } from "./signature-annotation-renderer";
+import { TextAnnotationRenderer } from "./text-annotation-renderer";
 
 interface PageSize {
   readonly width: number;
@@ -25,26 +29,36 @@ interface PageSize {
 
 interface PdfPageProps {
   readonly document: PDFDocumentProxy;
-  readonly pageIndex: number;
+  readonly originalPageIndex: number;
+  readonly displayIndex: number;
+  readonly totalPages: number;
   readonly pdfPointSize: PageSize;
+  readonly rotation: PageRotation;
   readonly zoom: number;
   readonly annotations: ReadonlyArray<Annotation>;
   readonly selectedId: string | null;
   readonly pendingPlacement: PendingPlacement | null;
   readonly onSelect: (id: string | null) => void;
   readonly onPlaceAt: (
-    pageIndex: number,
+    originalPageIndex: number,
     xFraction: number,
     yFraction: number,
   ) => void;
   readonly onUpdate: (id: string, patch: Partial<Annotation>) => void;
   readonly onDelete: (id: string) => void;
+  readonly onRotatePage: (displayIndex: number) => void;
+  readonly onRemovePage: (displayIndex: number) => void;
+  readonly onMovePageUp: (displayIndex: number) => void;
+  readonly onMovePageDown: (displayIndex: number) => void;
 }
 
-export function PdfPage({
+function PdfPageImpl({
   document,
-  pageIndex,
+  originalPageIndex,
+  displayIndex,
+  totalPages,
   pdfPointSize,
+  rotation,
   zoom,
   annotations,
   selectedId,
@@ -53,24 +67,52 @@ export function PdfPage({
   onPlaceAt,
   onUpdate,
   onDelete,
+  onRotatePage,
+  onRemovePage,
+  onMovePageUp,
+  onMovePageDown,
 }: PdfPageProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [isRendered, setIsRendered] = useState<boolean>(false);
+  const isInView: boolean = useInView({ target: container });
+
+  const displayedPointSize: PageSize = useMemo(
+    () => computeDisplayedPointSize(pdfPointSize, rotation),
+    [pdfPointSize, rotation],
+  );
 
   const pixelSize: PageSize = useMemo(
     () => ({
-      width: pdfPointSize.width * zoom,
-      height: pdfPointSize.height * zoom,
+      width: displayedPointSize.width * zoom,
+      height: displayedPointSize.height * zoom,
     }),
-    [pdfPointSize.height, pdfPointSize.width, zoom],
+    [displayedPointSize.height, displayedPointSize.width, zoom],
   );
 
-  useLayoutEffect(() => {
-    let cancelled: boolean = false;
+  const setContainerRef = useCallback(
+    (node: HTMLDivElement | null): void => {
+      containerRef.current = node;
+      setContainer(node);
+    },
+    [],
+  );
+
+  useEffect((): (() => void) | void => {
+    if (!isInView) return;
     const canvas: HTMLCanvasElement | null = canvasRef.current;
     if (!canvas) return;
     setIsRendered(false);
-    renderPdfPage({ document, pageIndex, canvas, scale: zoom })
+    const handle: RenderPdfPageHandle = renderPdfPage({
+      document,
+      pageIndex: originalPageIndex,
+      canvas,
+      scale: zoom,
+      userRotation: rotation,
+    });
+    let cancelled: boolean = false;
+    handle.promise
       .then(() => {
         if (!cancelled) setIsRendered(true);
       })
@@ -79,8 +121,9 @@ export function PdfPage({
       });
     return (): void => {
       cancelled = true;
+      handle.cancel();
     };
-  }, [document, pageIndex, zoom]);
+  }, [document, isInView, originalPageIndex, rotation, zoom]);
 
   useEffect((): (() => void) => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -112,17 +155,43 @@ export function PdfPage({
       const rect: DOMRect = event.currentTarget.getBoundingClientRect();
       const xFraction: number = (event.clientX - rect.left) / rect.width;
       const yFraction: number = (event.clientY - rect.top) / rect.height;
-      onPlaceAt(pageIndex, xFraction, yFraction);
+      onPlaceAt(originalPageIndex, xFraction, yFraction);
     },
-    [onPlaceAt, onSelect, pageIndex, pendingPlacement],
+    [onPlaceAt, onSelect, originalPageIndex, pendingPlacement],
   );
+
+  const handleRotate = useCallback((): void => {
+    onRotatePage(displayIndex);
+  }, [displayIndex, onRotatePage]);
+
+  const handleRemove = useCallback((): void => {
+    onRemovePage(displayIndex);
+  }, [displayIndex, onRemovePage]);
+
+  const handleMoveUp = useCallback((): void => {
+    onMovePageUp(displayIndex);
+  }, [displayIndex, onMovePageUp]);
+
+  const handleMoveDown = useCallback((): void => {
+    onMovePageDown(displayIndex);
+  }, [displayIndex, onMovePageDown]);
 
   const cursorStyle: string = resolveCursorStyle(pagePlacementCursor);
 
   return (
-    <div className="mx-auto flex flex-col items-center">
-      <div className="mb-2 text-xs font-medium text-slate-400">
-        Page {pageIndex + 1}
+    <div ref={setContainerRef} className="mx-auto flex flex-col items-center">
+      <div className="mb-2 flex items-center gap-3">
+        <span className="text-xs font-medium text-slate-400">
+          Page {displayIndex + 1}
+        </span>
+        <PageToolbar
+          displayIndex={displayIndex}
+          totalPages={totalPages}
+          onRotate={handleRotate}
+          onMoveUp={handleMoveUp}
+          onMoveDown={handleMoveDown}
+          onDelete={handleRemove}
+        />
       </div>
       <div
         className="relative overflow-hidden rounded-sm bg-white shadow-md ring-1 ring-slate-200"
@@ -132,7 +201,7 @@ export function PdfPage({
         }}
       >
         <canvas ref={canvasRef} className="block" />
-        {!isRendered && <PageSkeleton />}
+        {(!isInView || !isRendered) && <PageSkeleton />}
         <div
           className="absolute inset-0"
           style={{ cursor: cursorStyle }}
@@ -183,6 +252,16 @@ export function PdfPage({
   );
 }
 
+function computeDisplayedPointSize(
+  pdfPointSize: PageSize,
+  rotation: PageRotation,
+): PageSize {
+  if (rotation === 90 || rotation === 270) {
+    return { width: pdfPointSize.height, height: pdfPointSize.width };
+  }
+  return pdfPointSize;
+}
+
 function resolveCursorStyle(kind: PendingPlacementKind | undefined): string {
   if (kind === "text") return "text";
   if (kind === "signature" || kind === "shape") return "crosshair";
@@ -196,3 +275,5 @@ function PageSkeleton() {
     </div>
   );
 }
+
+export const PdfPage = memo(PdfPageImpl);

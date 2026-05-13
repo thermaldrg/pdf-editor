@@ -3,12 +3,16 @@ import { Button } from './button';
 
 interface EmptyStateProps {
   readonly onOpenFile: (file: File) => void;
+  readonly onOpenMerge: () => void;
+  readonly onOpenCompress: () => void;
   readonly errorMessage: string | null;
   readonly isLoading: boolean;
 }
 
 export function EmptyState({
   onOpenFile,
+  onOpenMerge,
+  onOpenCompress,
   errorMessage,
   isLoading,
 }: EmptyStateProps) {
@@ -61,13 +65,29 @@ export function EmptyState({
         <p className="mb-6 text-sm text-slate-500">
           Add text, drop your signature, then export a flattened PDF.
         </p>
-        <Button
-          variant="primary"
-          onClick={handleBrowseClick}
-          disabled={isLoading}
-        >
-          {isLoading ? 'Loading…' : 'Choose PDF'}
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button
+            variant="primary"
+            onClick={handleBrowseClick}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Loading…' : 'Choose PDF'}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={onOpenMerge}
+            disabled={isLoading}
+          >
+            Merge PDFs
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={onOpenCompress}
+            disabled={isLoading}
+          >
+            Compress PDF
+          </Button>
+        </div>
         <input
           ref={inputRef}
           type="file"

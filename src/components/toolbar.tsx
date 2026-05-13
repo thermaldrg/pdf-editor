@@ -12,16 +12,14 @@ const SHAPE_TOOLS: ReadonlySet<ToolbarTool> = new Set<ToolbarTool>([
 
 interface ToolbarProps {
   readonly pendingTool: ToolbarTool | null;
-  readonly canExport: boolean;
-  readonly isExporting: boolean;
   readonly zoom: number;
+  readonly isSidebarOpen: boolean;
+  readonly onToggleSidebar: () => void;
   readonly onActivateText: () => void;
   readonly onActivateSignature: () => void;
   readonly onActivateDate: () => void;
   readonly onActivateShape: (shape: ShapeKind) => void;
   readonly onCancelPlacement: () => void;
-  readonly onExport: () => void;
-  readonly onReplaceFile: () => void;
   readonly onZoomIn: () => void;
   readonly onZoomOut: () => void;
   readonly onResetZoom: () => void;
@@ -29,16 +27,14 @@ interface ToolbarProps {
 
 export function Toolbar({
   pendingTool,
-  canExport,
-  isExporting,
   zoom,
+  isSidebarOpen,
+  onToggleSidebar,
   onActivateText,
   onActivateSignature,
   onActivateDate,
   onActivateShape,
   onCancelPlacement,
-  onExport,
-  onReplaceFile,
   onZoomIn,
   onZoomOut,
   onResetZoom,
@@ -47,9 +43,27 @@ export function Toolbar({
     pendingTool && SHAPE_TOOLS.has(pendingTool)
       ? (pendingTool as ShapeKind)
       : null;
+  const sidebarLabel: string = isSidebarOpen
+    ? 'Hide page thumbnails'
+    : 'Show page thumbnails';
   return (
-    <div className="sticky top-[57px] z-10 border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-6 py-2.5">
+    <div className="sticky top-14 z-10 border-b border-slate-200 bg-white">
+      <div className="mx-auto flex h-12 max-w-7xl flex-wrap items-center gap-2 px-6">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          aria-label={sidebarLabel}
+          aria-pressed={isSidebarOpen}
+          title={sidebarLabel}
+          className={`flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
+            isSidebarOpen
+              ? 'border-indigo-200 bg-indigo-50 text-indigo-600'
+              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          <IconSidebar />
+        </button>
+        <Divider />
         <Button
           variant={pendingTool === 'text' ? 'primary' : 'secondary'}
           onClick={
@@ -71,7 +85,9 @@ export function Toolbar({
         <Button
           variant={pendingTool === 'signature' ? 'primary' : 'secondary'}
           onClick={
-            pendingTool === 'signature' ? onCancelPlacement : onActivateSignature
+            pendingTool === 'signature'
+              ? onCancelPlacement
+              : onActivateSignature
           }
         >
           <IconSignature />
@@ -83,47 +99,53 @@ export function Toolbar({
           onCancelPlacement={onCancelPlacement}
         />
 
-        <div className="ml-2 flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+        <div className="ml-auto flex items-center gap-1 rounded-md border border-slate-200 bg-white p-0.5 shadow-sm">
           <button
             type="button"
             onClick={onZoomOut}
-            className="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100"
+            className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100"
             aria-label="Zoom out"
           >
-            −
+            <IconMinus />
           </button>
           <button
             type="button"
             onClick={onResetZoom}
-            className="min-w-[56px] rounded-md px-2 py-1 text-center text-xs font-medium text-slate-700 hover:bg-slate-100"
+            className="min-w-[3.25rem] rounded px-1.5 py-1 text-center text-xs font-medium tabular-nums text-slate-700 hover:bg-slate-100"
           >
             {Math.round(zoom * 100)}%
           </button>
           <button
             type="button"
             onClick={onZoomIn}
-            className="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100"
+            className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100"
             aria-label="Zoom in"
           >
-            +
+            <IconPlus />
           </button>
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" onClick={onReplaceFile}>
-            Replace PDF
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!canExport || isExporting}
-            onClick={onExport}
-          >
-            <IconDownload />
-            {isExporting ? 'Exporting…' : 'Download PDF'}
-          </Button>
         </div>
       </div>
     </div>
+  );
+}
+
+function Divider() {
+  return <div className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />;
+}
+
+function IconSidebar() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.8}
+      stroke="currentColor"
+      className="h-4 w-4"
+    >
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path strokeLinecap="round" d="M9.5 4.5v15" />
+    </svg>
   );
 }
 
@@ -178,21 +200,32 @@ function IconSignature() {
   );
 }
 
-function IconDownload() {
+function IconMinus() {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
-      strokeWidth={1.8}
+      strokeWidth={2}
       stroke="currentColor"
-      className="h-4 w-4"
+      className="h-3.5 w-3.5"
     >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
-      />
+      <path strokeLinecap="round" d="M5 12h14" />
+    </svg>
+  );
+}
+
+function IconPlus() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={2}
+      stroke="currentColor"
+      className="h-3.5 w-3.5"
+    >
+      <path strokeLinecap="round" d="M12 5v14M5 12h14" />
     </svg>
   );
 }

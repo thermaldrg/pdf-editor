@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { memo, useCallback } from 'react';
 import type { Annotation, SignatureAnnotation } from '../types/annotation';
 import { AnnotationBox } from './annotation-box';
 import { SignatureAnnotationView } from './signature-annotation-view';
@@ -17,7 +17,7 @@ interface SignatureAnnotationRendererProps {
   readonly onDelete: (id: string) => void;
 }
 
-export function SignatureAnnotationRenderer({
+function SignatureAnnotationRendererImpl({
   annotation,
   isSelected,
   pagePixelSize,
@@ -53,3 +53,5 @@ export function SignatureAnnotationRenderer({
     </AnnotationBox>
   );
 }
+
+export const SignatureAnnotationRenderer = memo(SignatureAnnotationRendererImpl);

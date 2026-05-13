@@ -1,20 +1,69 @@
 {
   "name": "pdf-editor",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Fast, private, fully client-side PDF editor. Sign, annotate, merge, compress, and password-protect PDFs entirely in the browser or as a native desktop app.",
+  "license": "MIT",
   "type": "module",
+  "main": "dist-electron/main.mjs",
   "scripts": {
     "dev": "vite",
+    "dev:electron": "ELECTRON=1 vite",
     "build": "tsc -b && vite build",
+    "build:electron": "tsc -b && ELECTRON=1 vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start:electron": "electron .",
+    "package:mac": "bun run build:electron && electron-builder --mac"
+  },
+  "trustedDependencies": [
+    "electron",
+    "electron-builder"
+  ],
+  "build": {
+    "appId": "com.shaneeilia.pdfeditor",
+    "productName": "PDF Editor",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    }
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@libpdf/core": "^0.3.4",
     "@tailwindcss/vite": "^4.2.3",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.6.205",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "sonner": "^2.0.7",
     "tailwindcss": "^4.2.3"
   },
   "devDependencies": {
@@ -23,12 +72,15 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "electron": "^41.2.1",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.9"
+    "vite": "^8.0.9",
+    "vite-plugin-electron": "^0.29.1"
   }
 }

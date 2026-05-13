@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { memo, useCallback } from 'react';
 import type { Annotation, ShapeAnnotation } from '../types/annotation';
 import {
   SHAPE_COLOR_PRESETS,
@@ -22,7 +22,7 @@ interface ShapeAnnotationRendererProps {
   readonly onDelete: (id: string) => void;
 }
 
-export function ShapeAnnotationRenderer({
+function ShapeAnnotationRendererImpl({
   annotation,
   isSelected,
   pagePixelSize,
@@ -80,3 +80,5 @@ export function ShapeAnnotationRenderer({
     </AnnotationBox>
   );
 }
+
+export const ShapeAnnotationRenderer = memo(ShapeAnnotationRendererImpl);

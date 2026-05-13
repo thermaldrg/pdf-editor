@@ -1,4 +1,8 @@
 @import 'tailwindcss';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
 
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -17,4 +21,23 @@ body {
 
 .signature-cursor {
   cursor: crosshair;
+}
+
+/* Electron macOS drag region helpers. Harmless in the browser (where the
+ * `app-region` property is simply ignored). */
+.app-drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Reserve space for macOS traffic lights when running inside Electron with a
+ * hidden-inset title bar. Scoped via the `is-electron` class on <html> so the
+ * browser layout is unaffected. */
+html.is-electron .app-header-inner {
+  padding-left: 5.25rem;
 }

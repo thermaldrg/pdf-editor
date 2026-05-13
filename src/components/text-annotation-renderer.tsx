@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import type { Annotation, TextAnnotation } from '../types/annotation';
 import { AnnotationBox } from './annotation-box';
 import { TextAnnotationView } from './text-annotation-view';
@@ -17,7 +17,7 @@ interface TextAnnotationRendererProps {
   readonly onDelete: (id: string) => void;
 }
 
-export function TextAnnotationRenderer({
+function TextAnnotationRendererImpl({
   annotation,
   isSelected,
   pagePixelSize,
@@ -25,22 +25,17 @@ export function TextAnnotationRenderer({
   onUpdate,
   onDelete,
 }: TextAnnotationRendererProps) {
-  const [isEditing, setIsEditing] = useState<boolean>(
+  const [isEditingRequested, setIsEditingRequested] = useState<boolean>(
     annotation.text.length === 0,
   );
-
-  useEffect(() => {
-    if (!isSelected && isEditing) {
-      setIsEditing(false);
-    }
-  }, [isSelected, isEditing]);
+  const isEditing: boolean = isEditingRequested && isSelected;
 
   const handleEnterEdit = useCallback((): void => {
-    setIsEditing(true);
+    setIsEditingRequested(true);
   }, []);
 
   const handleExitEdit = useCallback((): void => {
-    setIsEditing(false);
+    setIsEditingRequested(false);
   }, []);
 
   const handleMove = useCallback(
@@ -81,7 +76,6 @@ export function TextAnnotationRenderer({
       onDelete={onDelete}
       onDoubleClick={handleEnterEdit}
       interactiveChildren={isEditing}
-      uniformResize
     >
       <TextAnnotationView
         annotation={annotation}
@@ -93,3 +87,5 @@ export function TextAnnotationRenderer({
     </AnnotationBox>
   );
 }
+
+export const TextAnnotationRenderer = memo(TextAnnotationRendererImpl);
