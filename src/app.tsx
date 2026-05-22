@@ -612,19 +612,57 @@ export function App() {
         className="hidden"
         onChange={handleReplaceChange}
       />
-      <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400">
-        {pdf
-          ? ` ${annotations.length} annotation${annotations.length === 1 ? "" : "s"} placed.`
-          : " nothing is uploaded."}
-        {pdf && (
-          <button
-            type="button"
-            onClick={closeFile}
-            className="ml-2 text-indigo-600 hover:underline"
-          >
-            Close document
-          </button>
-        )}
+      <footer className="border-t border-slate-200 bg-white py-4 text-xs text-slate-500">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-6 sm:flex-row">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 text-slate-500">
+              <span
+                aria-hidden="true"
+                className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500"
+              />
+              100% client-side. Files never leave your device.
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            {pdf && (
+              <>
+                <span className="text-slate-400">
+                  {annotations.length} annotation
+                  {annotations.length === 1 ? "" : "s"} placed
+                </span>
+                <button
+                  type="button"
+                  onClick={closeFile}
+                  className="text-indigo-600 hover:underline"
+                >
+                  Close document
+                </button>
+                <span aria-hidden="true" className="text-slate-300">|</span>
+              </>
+            )}
+            <a
+              href="https://github.com/thermaldrg/pdf-editor"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 font-medium text-slate-600 hover:text-indigo-600"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+                className="h-3.5 w-3.5"
+              >
+                <path
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M12 2C6.477 2 2 6.485 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.009-.868-.014-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.467-1.11-1.467-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.339-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.31.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.485 17.523 2 12 2z"
+                />
+              </svg>
+              Open source on GitHub
+            </a>
+          </div>
+        </div>
       </footer>
     </div>
   );
