@@ -3,6 +3,8 @@ import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
 import { loadPdfLibDocument } from './load-pdf-lib-document';
 import type {
   Annotation,
+  ImageAnnotation,
+  RasterImageMimeType,
   ShapeAnnotation,
   SignatureAnnotation,
   TextAnnotation,
@@ -102,6 +104,16 @@ async function stampAnnotation({
     });
     return;
   }
+  if (annotation.kind === 'image') {
+    await stampImage({
+      annotation,
+      page,
+      pdfDocument,
+      underlying,
+      totalRotation,
+    });
+    return;
+  }
   stampShape({ annotation, page, underlying, totalRotation });
 }
 
@@ -162,6 +174,64 @@ async function stampSignature({
   totalRotation,
 }: StampSignatureArgs): Promise<void> {
   const image: PDFImage = await pdfDocument.embedPng(annotation.dataUrl);
+  drawEmbeddedImage({ image, annotation, page, underlying, totalRotation });
+}
+
+interface StampImageArgs {
+  readonly annotation: ImageAnnotation;
+  readonly page: PDFPage;
+  readonly pdfDocument: PDFDocument;
+  readonly underlying: UnderlyingPageSizePt;
+  readonly totalRotation: number;
+}
+
+async function stampImage({
+  annotation,
+  page,
+  pdfDocument,
+  underlying,
+  totalRotation,
+}: StampImageArgs): Promise<void> {
+  const image: PDFImage = await embedRasterImage({
+    pdfDocument,
+    dataUrl: annotation.dataUrl,
+    mimeType: annotation.mimeType,
+  });
+  drawEmbeddedImage({ image, annotation, page, underlying, totalRotation });
+}
+
+interface EmbedRasterImageArgs {
+  readonly pdfDocument: PDFDocument;
+  readonly dataUrl: string;
+  readonly mimeType: RasterImageMimeType;
+}
+
+function embedRasterImage({
+  pdfDocument,
+  dataUrl,
+  mimeType,
+}: EmbedRasterImageArgs): Promise<PDFImage> {
+  if (mimeType === 'image/jpeg') {
+    return pdfDocument.embedJpg(dataUrl);
+  }
+  return pdfDocument.embedPng(dataUrl);
+}
+
+interface DrawEmbeddedImageArgs {
+  readonly image: PDFImage;
+  readonly annotation: SignatureAnnotation | ImageAnnotation;
+  readonly page: PDFPage;
+  readonly underlying: UnderlyingPageSizePt;
+  readonly totalRotation: number;
+}
+
+function drawEmbeddedImage({
+  image,
+  annotation,
+  page,
+  underlying,
+  totalRotation,
+}: DrawEmbeddedImageArgs): void {
   const displayedHeight: number =
     totalRotation % 180 === 0 ? underlying.height : underlying.width;
   const displayedWidth: number =

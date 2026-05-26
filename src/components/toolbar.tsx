@@ -2,7 +2,7 @@ import type { ShapeKind } from '../types/annotation';
 import { Button } from './button';
 import { ShapesMenu } from './shapes-menu';
 
-export type ToolbarTool = 'text' | 'signature' | 'date' | ShapeKind;
+export type ToolbarTool = 'text' | 'signature' | 'date' | 'image' | ShapeKind;
 
 const SHAPE_TOOLS: ReadonlySet<ToolbarTool> = new Set<ToolbarTool>([
   'cross',
@@ -14,10 +14,15 @@ interface ToolbarProps {
   readonly pendingTool: ToolbarTool | null;
   readonly zoom: number;
   readonly isSidebarOpen: boolean;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  readonly onUndo: () => void;
+  readonly onRedo: () => void;
   readonly onToggleSidebar: () => void;
   readonly onActivateText: () => void;
   readonly onActivateSignature: () => void;
   readonly onActivateDate: () => void;
+  readonly onActivateImage: () => void;
   readonly onActivateShape: (shape: ShapeKind) => void;
   readonly onCancelPlacement: () => void;
   readonly onZoomIn: () => void;
@@ -25,14 +30,24 @@ interface ToolbarProps {
   readonly onResetZoom: () => void;
 }
 
+const UNDO_SHORTCUT_LABEL: string = isMacPlatform() ? 'Cmd+Z' : 'Ctrl+Z';
+const REDO_SHORTCUT_LABEL: string = isMacPlatform()
+  ? 'Cmd+Shift+Z'
+  : 'Ctrl+Y';
+
 export function Toolbar({
   pendingTool,
   zoom,
   isSidebarOpen,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   onToggleSidebar,
   onActivateText,
   onActivateSignature,
   onActivateDate,
+  onActivateImage,
   onActivateShape,
   onCancelPlacement,
   onZoomIn,
@@ -64,6 +79,23 @@ export function Toolbar({
           <IconSidebar />
         </button>
         <Divider />
+        <HistoryButton
+          ariaLabel="Undo"
+          title={`Undo (${UNDO_SHORTCUT_LABEL})`}
+          disabled={!canUndo}
+          onClick={onUndo}
+        >
+          <IconUndo />
+        </HistoryButton>
+        <HistoryButton
+          ariaLabel="Redo"
+          title={`Redo (${REDO_SHORTCUT_LABEL})`}
+          disabled={!canRedo}
+          onClick={onRedo}
+        >
+          <IconRedo />
+        </HistoryButton>
+        <Divider />
         <Button
           variant={pendingTool === 'text' ? 'primary' : 'secondary'}
           onClick={
@@ -92,6 +124,15 @@ export function Toolbar({
         >
           <IconSignature />
           {pendingTool === 'signature' ? 'Click to place' : 'Add signature'}
+        </Button>
+        <Button
+          variant={pendingTool === 'image' ? 'primary' : 'secondary'}
+          onClick={
+            pendingTool === 'image' ? onCancelPlacement : onActivateImage
+          }
+        >
+          <IconImage />
+          {pendingTool === 'image' ? 'Click to place' : 'Add image'}
         </Button>
         <ShapesMenu
           activeShape={activeShape}
@@ -131,6 +172,78 @@ export function Toolbar({
 
 function Divider() {
   return <div className="mx-1 h-5 w-px bg-slate-200" aria-hidden="true" />;
+}
+
+interface HistoryButtonProps {
+  readonly ariaLabel: string;
+  readonly title: string;
+  readonly disabled: boolean;
+  readonly onClick: () => void;
+  readonly children: React.ReactNode;
+}
+
+function HistoryButton({
+  ariaLabel,
+  title,
+  disabled,
+  onClick,
+  children,
+}: HistoryButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      title={title}
+      className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+    >
+      {children}
+    </button>
+  );
+}
+
+function isMacPlatform(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Mac|iPhone|iPod|iPad/i.test(navigator.platform);
+}
+
+function IconUndo() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.8}
+      stroke="currentColor"
+      className="h-4 w-4"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 14l-4-4m0 0l4-4m-4 4h11a5 5 0 010 10h-2"
+      />
+    </svg>
+  );
+}
+
+function IconRedo() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.8}
+      stroke="currentColor"
+      className="h-4 w-4"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 14l4-4m0 0l-4-4m4 4H8a5 5 0 000 10h2"
+      />
+    </svg>
+  );
 }
 
 function IconSidebar() {
@@ -195,6 +308,25 @@ function IconSignature() {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13L2.25 21.75l.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zM19.5 7.125l-2.625-2.625"
+      />
+    </svg>
+  );
+}
+
+function IconImage() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.8}
+      stroke="currentColor"
+      className="h-4 w-4"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
       />
     </svg>
   );

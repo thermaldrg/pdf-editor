@@ -28,9 +28,25 @@ export interface TabPasswordPromptState {
 }
 
 /**
+ * Snapshot of the editable parts of a tab. The history stacks store these so
+ * that undo/redo only touches user-authored content and never the transient
+ * UI state (zoom, sidebar, pending placement, etc.).
+ */
+export interface TabHistoryEntry {
+  readonly annotations: ReadonlyArray<Annotation>;
+  readonly pageOperations: ReadonlyArray<PageOperation>;
+  readonly formValues: FormFieldValues;
+  readonly selectedAnnotationId: string | null;
+}
+
+/**
  * The complete editing state for a single tab. Holding all per-tab state in
  * one object keeps the tabs reducer simple and lets us swap the active tab
  * with O(1) reads and zero re-parsing of the PDF.
+ *
+ * `past` / `future` form an undo stack. `lastHistoryCoalesceKey` and
+ * `lastHistoryAt` let consecutive small edits (a drag gesture, a burst of
+ * typing) collapse into a single undo step.
  */
 export interface TabState {
   readonly id: string;
@@ -47,4 +63,8 @@ export interface TabState {
   readonly pendingPlacement: PendingPlacement | null;
   readonly zoom: number;
   readonly isSidebarOpen: boolean;
+  readonly past: ReadonlyArray<TabHistoryEntry>;
+  readonly future: ReadonlyArray<TabHistoryEntry>;
+  readonly lastHistoryCoalesceKey: string | null;
+  readonly lastHistoryAt: number | null;
 }

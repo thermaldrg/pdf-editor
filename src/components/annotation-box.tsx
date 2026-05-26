@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { useHistoryBoundary } from '../contexts/history-boundary-context';
 import type { Annotation } from '../types/annotation';
 
 interface PageSize {
@@ -51,6 +52,7 @@ export function AnnotationBox({
   children,
 }: AnnotationBoxProps) {
   const dragStateRef = useRef<DragState | null>(null);
+  const markHistoryBoundary = useHistoryBoundary();
 
   const pixelLeft: number = annotation.x * pagePixelSize.width;
   const pixelTop: number = annotation.y * pagePixelSize.height;
@@ -64,6 +66,7 @@ export function AnnotationBox({
     ): void => {
       event.stopPropagation();
       event.preventDefault();
+      markHistoryBoundary();
       onSelect(annotation.id);
       (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
       dragStateRef.current = {
@@ -76,7 +79,7 @@ export function AnnotationBox({
         startHeight: annotation.height,
       };
     },
-    [annotation, onSelect],
+    [annotation, markHistoryBoundary, onSelect],
   );
 
   const handlePointerMove = useCallback(

@@ -14,6 +14,7 @@ import { PdfViewer } from "./components/pdf-viewer";
 import { PlacementBanner } from "./components/placement-banner";
 import { TabBar } from "./components/tab-bar";
 import { Toolbar } from "./components/toolbar";
+import { HistoryBoundaryContext } from "./contexts/history-boundary-context";
 
 const SignaturePadModal = lazy(() =>
   import("./components/signature-pad-modal").then((mod) => ({
@@ -50,6 +51,11 @@ import { createId } from "./lib/create-id";
 import { downloadBlob } from "./lib/download-blob";
 import { formatBytes } from "./lib/format-bytes";
 import { formatDateDdMmYyyy } from "./lib/format-date";
+import {
+  findImageBlobInClipboard,
+  readImageFromBlob,
+  type ReadImageResult,
+} from "./lib/read-image-from-blob";
 import type { CompressMode } from "./types/compress-mode";
 import type { CompressionLevel } from "./types/compression-level";
 import type { MergeMode } from "./types/merge-mode";
@@ -61,6 +67,7 @@ import {
 import type { Annotation, ShapeKind } from "./types/annotation";
 import type { DownloadResult } from "./types/download-result";
 import type {
+  PendingImagePlacement,
   PendingPlacement,
   PendingShapePlacement,
   PendingSignaturePlacement,
@@ -81,6 +88,8 @@ const DEFAULT_TEXT_COLOR: string = "#0f172a";
 const DEFAULT_DATE_WIDTH: number = 0.16;
 
 const DEFAULT_SIGNATURE_WIDTH: number = 0.25;
+
+const DEFAULT_IMAGE_WIDTH: number = 0.35;
 
 export function App() {
   const {
@@ -113,6 +122,11 @@ export function App() {
     setActiveZoom,
     toggleActiveSidebar,
     hasActiveFormEdits,
+    undoActive,
+    redoActive,
+    markHistoryBoundary,
+    canUndo,
+    canRedo,
   } = useTabs();
   const {
     signatures: savedSignatures,
@@ -147,6 +161,7 @@ export function App() {
   const [protectError, setProtectError] = useState<string | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
   const newTabInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const pendingTool: ToolbarTool | null = useMemo(
     () => resolvePendingTool(pendingPlacement),
@@ -242,6 +257,40 @@ export function App() {
       setActivePendingPlacement(placement);
     },
     [setActivePendingPlacement],
+  );
+
+  const beginImagePlacementFromBlob = useCallback(
+    async (blob: Blob): Promise<void> => {
+      try {
+        const result: ReadImageResult = await readImageFromBlob(blob);
+        const placement: PendingImagePlacement = {
+          kind: 'image',
+          dataUrl: result.dataUrl,
+          aspectRatio: result.aspectRatio,
+          mimeType: result.mimeType,
+        };
+        setActivePendingPlacement(placement);
+      } catch (err) {
+        const message: string =
+          err instanceof Error ? err.message : 'Failed to read image.';
+        toast.error('Could not add image', { description: message });
+      }
+    },
+    [setActivePendingPlacement],
+  );
+
+  const handleActivateImage = useCallback((): void => {
+    imageInputRef.current?.click();
+  }, []);
+
+  const handleImageFileChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>): void => {
+      const file: File | undefined = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+      void beginImagePlacementFromBlob(file);
+    },
+    [beginImagePlacementFromBlob],
   );
 
   const handleCancelPlacement = useCallback((): void => {
@@ -501,7 +550,19 @@ export function App() {
     tabsLength: tabs.length,
   });
 
+  useGlobalImagePaste({
+    isEnabled: pdf !== null,
+    onImageBlob: beginImagePlacementFromBlob,
+  });
+
+  useGlobalHistoryShortcuts({
+    isEnabled: pdf !== null,
+    onUndo: undoActive,
+    onRedo: redoActive,
+  });
+
   return (
+    <HistoryBoundaryContext.Provider value={markHistoryBoundary}>
     <div className="flex min-h-full flex-col">
       <AppHeader
         fileName={pdf?.fileName ?? null}
@@ -528,10 +589,15 @@ export function App() {
           pendingTool={pendingTool}
           zoom={zoom}
           isSidebarOpen={isSidebarOpen}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={undoActive}
+          onRedo={redoActive}
           onToggleSidebar={toggleActiveSidebar}
           onActivateText={handleActivateText}
           onActivateDate={handleActivateDate}
           onActivateSignature={handleActivateSignature}
+          onActivateImage={handleActivateImage}
           onActivateShape={handleActivateShape}
           onCancelPlacement={handleCancelPlacement}
           onZoomIn={handleZoomIn}
@@ -645,6 +711,13 @@ export function App() {
         className="hidden"
         onChange={handleNewTabFileChange}
       />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFileChange}
+      />
       <footer className="border-t border-slate-200 bg-white py-4 text-xs text-slate-500">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-6 sm:flex-row">
           <div className="flex items-center gap-3">
@@ -698,6 +771,7 @@ export function App() {
         </div>
       </footer>
     </div>
+    </HistoryBoundaryContext.Provider>
   );
 }
 
@@ -741,6 +815,63 @@ function useGlobalTabShortcuts({
     window.addEventListener('keydown', handler);
     return (): void => window.removeEventListener('keydown', handler);
   }, [onNewTab, onCloseActiveTab, onActivateIndex, tabsLength]);
+}
+
+interface UseGlobalImagePasteArgs {
+  readonly isEnabled: boolean;
+  readonly onImageBlob: (blob: Blob) => Promise<void>;
+}
+
+function useGlobalImagePaste({
+  isEnabled,
+  onImageBlob,
+}: UseGlobalImagePasteArgs): void {
+  useEffect((): (() => void) | void => {
+    if (!isEnabled) return;
+    const handler = (event: ClipboardEvent): void => {
+      if (isInsideEditableTarget(event.target)) return;
+      const blob: Blob | null = findImageBlobInClipboard(event.clipboardData);
+      if (!blob) return;
+      event.preventDefault();
+      void onImageBlob(blob);
+    };
+    window.addEventListener('paste', handler);
+    return (): void => window.removeEventListener('paste', handler);
+  }, [isEnabled, onImageBlob]);
+}
+
+interface UseGlobalHistoryShortcutsArgs {
+  readonly isEnabled: boolean;
+  readonly onUndo: () => void;
+  readonly onRedo: () => void;
+}
+
+function useGlobalHistoryShortcuts({
+  isEnabled,
+  onUndo,
+  onRedo,
+}: UseGlobalHistoryShortcutsArgs): void {
+  useEffect((): (() => void) | void => {
+    if (!isEnabled) return;
+    const handler = (event: KeyboardEvent): void => {
+      const isMod: boolean = event.metaKey || event.ctrlKey;
+      if (!isMod) return;
+      const key: string = event.key.toLowerCase();
+      const isUndoCombo: boolean = key === 'z' && !event.shiftKey;
+      const isRedoCombo: boolean =
+        (key === 'z' && event.shiftKey) || key === 'y';
+      if (!isUndoCombo && !isRedoCombo) return;
+      if (isInsideEditableTarget(event.target)) return;
+      event.preventDefault();
+      if (isUndoCombo) {
+        onUndo();
+        return;
+      }
+      onRedo();
+    };
+    window.addEventListener('keydown', handler);
+    return (): void => window.removeEventListener('keydown', handler);
+  }, [isEnabled, onUndo, onRedo]);
 }
 
 function isInsideEditableTarget(target: EventTarget | null): boolean {
@@ -800,6 +931,24 @@ function buildAnnotation({
       dataUrl: placement.dataUrl,
     };
   }
+  if (placement.kind === 'image') {
+    const widthFraction: number = DEFAULT_IMAGE_WIDTH;
+    const heightFraction: number =
+      (widthFraction * pageAspectRatio) / placement.aspectRatio;
+    const clampedWidth: number = Math.min(widthFraction, 1);
+    const clampedHeight: number = Math.min(heightFraction, 1);
+    return {
+      id: createId(),
+      kind: 'image',
+      pageIndex,
+      x: clamp(xFraction - clampedWidth / 2, 0, 1 - clampedWidth),
+      y: clamp(yFraction - clampedHeight / 2, 0, 1 - clampedHeight),
+      width: clampedWidth,
+      height: clampedHeight,
+      dataUrl: placement.dataUrl,
+      mimeType: placement.mimeType,
+    };
+  }
   const definition = getShapeDefinition(placement.shape);
   const widthFraction: number = definition.defaultWidth;
   const heightFraction: number =
@@ -838,6 +987,7 @@ function resolvePendingTool(
 ): ToolbarTool | null {
   if (!placement) return null;
   if (placement.kind === 'signature') return 'signature';
+  if (placement.kind === 'image') return 'image';
   if (placement.kind === 'shape') return placement.shape;
   return placement.initialText !== undefined ? 'date' : 'text';
 }

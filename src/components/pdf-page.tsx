@@ -20,6 +20,7 @@ import { renderPdfPage } from "../lib/render-pdf-page";
 import type { RenderPdfPageHandle } from "../lib/render-pdf-page";
 import { useInView } from "../hooks/use-in-view";
 import { FormFieldOverlay } from "./form-field-overlay";
+import { ImageAnnotationRenderer } from "./image-annotation-renderer";
 import { PageToolbar } from "./page-toolbar";
 import { ShapeAnnotationRenderer } from "./shape-annotation-renderer";
 import { SignatureAnnotationRenderer } from "./signature-annotation-renderer";
@@ -257,6 +258,19 @@ function PdfPageImpl({
                 />
               );
             }
+            if (annotation.kind === "image") {
+              return (
+                <ImageAnnotationRenderer
+                  key={annotation.id}
+                  annotation={annotation}
+                  isSelected={selectedId === annotation.id}
+                  pagePixelSize={pixelSize}
+                  onSelect={onSelect}
+                  onUpdate={onUpdate}
+                  onDelete={onDelete}
+                />
+              );
+            }
             return (
               <ShapeAnnotationRenderer
                 key={annotation.id}
@@ -306,7 +320,9 @@ function computeDisplayedPointSize(
 
 function resolveCursorStyle(kind: PendingPlacementKind | undefined): string {
   if (kind === "text") return "text";
-  if (kind === "signature" || kind === "shape") return "crosshair";
+  if (kind === "signature" || kind === "shape" || kind === "image") {
+    return "crosshair";
+  }
   return "default";
 }
 

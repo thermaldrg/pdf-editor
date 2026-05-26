@@ -9,6 +9,7 @@ const MESSAGES: Record<ToolbarTool, string> = {
   text: 'Click anywhere on the page to drop a text field.',
   date: 'Click anywhere on the page to drop today\u2019s date.',
   signature: 'Click anywhere on the page to drop your signature.',
+  image: 'Click anywhere on the page to drop your image.',
   cross: 'Click anywhere on the page to drop a cross.',
   tick: 'Click anywhere on the page to drop a tick.',
   dash: 'Click anywhere on the page to drop a dash.',

@@ -6,9 +6,11 @@
  * export layer independent from the current zoom level or rendering scale.
  */
 
-export type AnnotationKind = 'text' | 'signature' | 'shape';
+export type AnnotationKind = 'text' | 'signature' | 'shape' | 'image';
 
 export type ShapeKind = 'cross' | 'tick' | 'dash';
+
+export type RasterImageMimeType = 'image/png' | 'image/jpeg';
 
 interface BaseAnnotation {
   readonly id: string;
@@ -38,4 +40,14 @@ export interface ShapeAnnotation extends BaseAnnotation {
   strokeWidth: number;
 }
 
-export type Annotation = TextAnnotation | SignatureAnnotation | ShapeAnnotation;
+export interface ImageAnnotation extends BaseAnnotation {
+  readonly kind: 'image';
+  readonly dataUrl: string;
+  readonly mimeType: RasterImageMimeType;
+}
+
+export type Annotation =
+  | TextAnnotation
+  | SignatureAnnotation
+  | ShapeAnnotation
+  | ImageAnnotation;

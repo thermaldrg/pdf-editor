@@ -22,6 +22,15 @@ import {
   setFormValue,
 } from '../lib/form-values-store';
 import { loadPdf, PdfPasswordRequiredError } from '../lib/load-pdf';
+import {
+  applyRedo,
+  applyUndo,
+  buildEmptyHistory,
+  commitHistory,
+  hasRedo,
+  hasUndo,
+  markBoundary,
+} from '../lib/tab-history';
 import type { Annotation } from '../types/annotation';
 import type { FormFieldValue } from '../types/form-values';
 import type { PageRotation } from '../types/page-operation';
@@ -49,6 +58,7 @@ function buildEmptyTab(id: string): TabState {
     pendingPlacement: null,
     zoom: DEFAULT_ZOOM,
     isSidebarOpen: true,
+    ...buildEmptyHistory(),
   };
 }
 
@@ -59,20 +69,52 @@ interface TabsRootState {
 
 type TabPatch = (tab: TabState) => TabState;
 
+interface HistoryOptions {
+  readonly coalesceKey: string | null;
+  readonly now: number;
+}
+
 type Action =
-  | { readonly type: 'patch_tab'; readonly id: string; readonly patch: TabPatch }
+  | {
+      readonly type: 'patch_tab';
+      readonly id: string;
+      readonly patch: TabPatch;
+      readonly history?: HistoryOptions;
+    }
   | { readonly type: 'create_tab'; readonly id: string }
   | { readonly type: 'close_tab'; readonly id: string; readonly fallbackId: string }
   | { readonly type: 'activate_tab'; readonly id: string }
-  | { readonly type: 'reorder_tabs'; readonly nextOrder: ReadonlyArray<string> };
+  | { readonly type: 'reorder_tabs'; readonly nextOrder: ReadonlyArray<string> }
+  | { readonly type: 'undo'; readonly id: string }
+  | { readonly type: 'redo'; readonly id: string }
+  | { readonly type: 'mark_history_boundary'; readonly id: string };
 
 function reducer(state: TabsRootState, action: Action): TabsRootState {
   if (action.type === 'patch_tab') {
-    const nextTabs: ReadonlyArray<TabState> = state.tabs.map((tab) =>
-      tab.id === action.id ? action.patch(tab) : tab,
-    );
+    const history: HistoryOptions | undefined = action.history;
+    const nextTabs: ReadonlyArray<TabState> = state.tabs.map((tab) => {
+      if (tab.id !== action.id) return tab;
+      const patched: TabState = action.patch(tab);
+      if (patched === tab) return tab;
+      if (!history) return patched;
+      return commitHistory({
+        previous: tab,
+        next: patched,
+        coalesceKey: history.coalesceKey,
+        now: history.now,
+      });
+    });
     if (nextTabs === state.tabs) return state;
     return { ...state, tabs: nextTabs };
+  }
+  if (action.type === 'undo') {
+    return mapTab(state, action.id, applyUndo);
+  }
+  if (action.type === 'redo') {
+    return mapTab(state, action.id, applyRedo);
+  }
+  if (action.type === 'mark_history_boundary') {
+    return mapTab(state, action.id, markBoundary);
   }
   if (action.type === 'create_tab') {
     return {
@@ -108,6 +150,18 @@ function reducer(state: TabsRootState, action: Action): TabsRootState {
     return { ...state, tabs: next };
   }
   return state;
+}
+
+function mapTab(
+  state: TabsRootState,
+  id: string,
+  transform: (tab: TabState) => TabState,
+): TabsRootState {
+  const nextTabs: ReadonlyArray<TabState> = state.tabs.map((tab) =>
+    tab.id === id ? transform(tab) : tab,
+  );
+  if (nextTabs === state.tabs) return state;
+  return { ...state, tabs: nextTabs };
 }
 
 function pickAdjacentTabId(
@@ -158,6 +212,11 @@ export interface TabsApi {
   readonly setActiveZoom: (zoom: number | ((current: number) => number)) => void;
   readonly toggleActiveSidebar: () => void;
   readonly hasActiveFormEdits: boolean;
+  readonly undoActive: () => void;
+  readonly redoActive: () => void;
+  readonly markHistoryBoundary: () => void;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
 }
 
 export function useTabs(): TabsApi {
@@ -181,6 +240,19 @@ export function useTabs(): TabsApi {
     (patch: TabPatch): void => {
       const targetId: string = stateRef.current.activeId;
       dispatch({ type: 'patch_tab', id: targetId, patch });
+    },
+    [],
+  );
+
+  const patchActiveTabWithHistory = useCallback(
+    (patch: TabPatch, coalesceKey: string | null = null): void => {
+      const targetId: string = stateRef.current.activeId;
+      dispatch({
+        type: 'patch_tab',
+        id: targetId,
+        patch,
+        history: { coalesceKey, now: Date.now() },
+      });
     },
     [],
   );
@@ -228,6 +300,7 @@ export function useTabs(): TabsApi {
         pageOperations: [],
         formValues: EMPTY_VALUES,
         pendingPlacement: null,
+        ...buildEmptyHistory(),
       }));
       try {
         const loaded: LoadedPdf = await loadPdf({ file });
@@ -355,35 +428,38 @@ export function useTabs(): TabsApi {
 
   const addActiveAnnotation = useCallback(
     (annotation: Annotation): void => {
-      patchActiveTab((tab) => ({
+      patchActiveTabWithHistory((tab) => ({
         ...tab,
         annotations: addAnnotationOp(tab.annotations, annotation),
         selectedAnnotationId: annotation.id,
       }));
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const updateActiveAnnotation = useCallback(
     (id: string, patch: Partial<Annotation>): void => {
-      patchActiveTab((tab) => ({
-        ...tab,
-        annotations: updateAnnotationOp(tab.annotations, id, patch),
-      }));
+      patchActiveTabWithHistory(
+        (tab) => ({
+          ...tab,
+          annotations: updateAnnotationOp(tab.annotations, id, patch),
+        }),
+        `annotation:${id}`,
+      );
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const removeActiveAnnotation = useCallback(
     (id: string): void => {
-      patchActiveTab((tab) => ({
+      patchActiveTabWithHistory((tab) => ({
         ...tab,
         annotations: removeAnnotationOp(tab.annotations, id),
         selectedAnnotationId:
           tab.selectedAnnotationId === id ? null : tab.selectedAnnotationId,
       }));
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const selectActiveAnnotation = useCallback(
@@ -394,16 +470,16 @@ export function useTabs(): TabsApi {
   );
 
   const clearActiveAnnotations = useCallback((): void => {
-    patchActiveTab((tab) => ({
+    patchActiveTabWithHistory((tab) => ({
       ...tab,
       annotations: [],
       selectedAnnotationId: null,
     }));
-  }, [patchActiveTab]);
+  }, [patchActiveTabWithHistory]);
 
   const rotateActivePage = useCallback(
     (displayIndex: number): void => {
-      patchActiveTab((tab) => {
+      patchActiveTabWithHistory((tab) => {
         const result: RotatePageResult | null = rotatePageAt(
           tab.pageOperations,
           displayIndex,
@@ -424,12 +500,12 @@ export function useTabs(): TabsApi {
         };
       });
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const removeActivePage = useCallback(
     (displayIndex: number): void => {
-      patchActiveTab((tab) => {
+      patchActiveTabWithHistory((tab) => {
         const result: RemovePageResult | null = removePageAt(
           tab.pageOperations,
           displayIndex,
@@ -450,45 +526,48 @@ export function useTabs(): TabsApi {
         };
       });
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const moveActivePageUp = useCallback(
     (displayIndex: number): void => {
-      patchActiveTab((tab) => ({
+      patchActiveTabWithHistory((tab) => ({
         ...tab,
         pageOperations: movePageUpAt(tab.pageOperations, displayIndex),
       }));
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const moveActivePageDown = useCallback(
     (displayIndex: number): void => {
-      patchActiveTab((tab) => ({
+      patchActiveTabWithHistory((tab) => ({
         ...tab,
         pageOperations: movePageDownAt(tab.pageOperations, displayIndex),
       }));
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const setActiveFormText = useCallback(
     (fieldName: string, value: string): void => {
-      patchActiveTab((tab) => ({
-        ...tab,
-        formValues: setFormValue(tab.formValues, fieldName, {
-          kind: 'text',
-          value,
+      patchActiveTabWithHistory(
+        (tab) => ({
+          ...tab,
+          formValues: setFormValue(tab.formValues, fieldName, {
+            kind: 'text',
+            value,
+          }),
         }),
-      }));
+        `form-text:${fieldName}`,
+      );
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const setActiveFormCheckbox = useCallback(
     (fieldName: string, value: boolean): void => {
-      patchActiveTab((tab) => ({
+      patchActiveTabWithHistory((tab) => ({
         ...tab,
         formValues: setFormValue(tab.formValues, fieldName, {
           kind: 'checkbox',
@@ -496,12 +575,12 @@ export function useTabs(): TabsApi {
         }),
       }));
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const setActiveFormRadio = useCallback(
     (fieldName: string, value: string | null): void => {
-      patchActiveTab((tab) => ({
+      patchActiveTabWithHistory((tab) => ({
         ...tab,
         formValues: setFormValue(tab.formValues, fieldName, {
           kind: 'radio',
@@ -509,12 +588,12 @@ export function useTabs(): TabsApi {
         }),
       }));
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const setActiveFormDropdown = useCallback(
     (fieldName: string, value: string): void => {
-      patchActiveTab((tab) => ({
+      patchActiveTabWithHistory((tab) => ({
         ...tab,
         formValues: setFormValue(tab.formValues, fieldName, {
           kind: 'dropdown',
@@ -522,12 +601,12 @@ export function useTabs(): TabsApi {
         }),
       }));
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
 
   const setActiveFormListbox = useCallback(
     (fieldName: string, value: ReadonlyArray<string>): void => {
-      patchActiveTab((tab) => ({
+      patchActiveTabWithHistory((tab) => ({
         ...tab,
         formValues: setFormValue(tab.formValues, fieldName, {
           kind: 'listbox',
@@ -535,8 +614,23 @@ export function useTabs(): TabsApi {
         }),
       }));
     },
-    [patchActiveTab],
+    [patchActiveTabWithHistory],
   );
+
+  const undoActive = useCallback((): void => {
+    dispatch({ type: 'undo', id: stateRef.current.activeId });
+  }, []);
+
+  const redoActive = useCallback((): void => {
+    dispatch({ type: 'redo', id: stateRef.current.activeId });
+  }, []);
+
+  const markHistoryBoundary = useCallback((): void => {
+    dispatch({
+      type: 'mark_history_boundary',
+      id: stateRef.current.activeId,
+    });
+  }, []);
 
   const setActiveZoom = useCallback(
     (zoom: number | ((current: number) => number)): void => {
@@ -558,6 +652,9 @@ export function useTabs(): TabsApi {
     const baseline = buildInitialFormValues(activeTab.pdf.formFields);
     return areFormValuesDirty(baseline, activeTab.formValues);
   }, [activeTab.pdf, activeTab.formValues]);
+
+  const canUndo: boolean = hasUndo(activeTab);
+  const canRedo: boolean = hasRedo(activeTab);
 
   return {
     tabs: state.tabs,
@@ -591,6 +688,11 @@ export function useTabs(): TabsApi {
     setActiveZoom,
     toggleActiveSidebar,
     hasActiveFormEdits,
+    undoActive,
+    redoActive,
+    markHistoryBoundary,
+    canUndo,
+    canRedo,
   };
 }
 
@@ -641,6 +743,7 @@ function applyLoadedPdf(
     pageOperations: buildInitialPageOperations(loaded.pageSizes.length),
     formValues: buildInitialFormValues(loaded.formFields),
     pendingPlacement: null,
+    ...buildEmptyHistory(),
   }));
 }
 
@@ -669,6 +772,7 @@ function applyPasswordPrompt(
     pageOperations: [],
     formValues: EMPTY_VALUES,
     pendingPlacement: null,
+    ...buildEmptyHistory(),
   }));
 }
 

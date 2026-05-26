@@ -1,6 +1,6 @@
-import type { ShapeKind } from './annotation';
+import type { RasterImageMimeType, ShapeKind } from './annotation';
 
-export type PendingPlacementKind = 'text' | 'signature' | 'shape';
+export type PendingPlacementKind = 'text' | 'signature' | 'shape' | 'image';
 
 export interface PendingTextPlacement {
   readonly kind: 'text';
@@ -18,7 +18,15 @@ export interface PendingShapePlacement {
   readonly shape: ShapeKind;
 }
 
+export interface PendingImagePlacement {
+  readonly kind: 'image';
+  readonly dataUrl: string;
+  readonly aspectRatio: number;
+  readonly mimeType: RasterImageMimeType;
+}
+
 export type PendingPlacement =
   | PendingTextPlacement
   | PendingSignaturePlacement
-  | PendingShapePlacement;
+  | PendingShapePlacement
+  | PendingImagePlacement;
