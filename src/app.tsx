@@ -12,6 +12,7 @@ import { AppHeader } from "./components/app-header";
 import { EmptyState } from "./components/empty-state";
 import { PdfViewer } from "./components/pdf-viewer";
 import { PlacementBanner } from "./components/placement-banner";
+import { TabBar } from "./components/tab-bar";
 import { Toolbar } from "./components/toolbar";
 
 const SignaturePadModal = lazy(() =>
@@ -41,11 +42,8 @@ const PasswordPromptModal = lazy(() =>
 );
 import type { ExportCompression } from "./components/export-menu";
 import type { ToolbarTool } from "./components/toolbar";
-import { useAnnotations } from "./hooks/use-annotations";
-import { useFormValues } from "./hooks/use-form-values";
-import { usePageOperations } from "./hooks/use-page-operations";
-import { usePdfDocument } from "./hooks/use-pdf-document";
 import { useSavedSignatures } from "./hooks/use-saved-signatures";
+import { useTabs } from "./hooks/use-tabs";
 import { awaitDownloadResult } from "./lib/await-download-result";
 import type { CompressPdfResult } from "./lib/compress-pdf";
 import { createId } from "./lib/create-id";
@@ -61,7 +59,6 @@ import {
   getShapeDefinition,
 } from "./lib/shape-geometry";
 import type { Annotation, ShapeKind } from "./types/annotation";
-import type { FormField } from "./types/form-field";
 import type { DownloadResult } from "./types/download-result";
 import type {
   PendingPlacement,
@@ -69,6 +66,7 @@ import type {
   PendingSignaturePlacement,
   PendingTextPlacement,
 } from "./types/placement";
+import type { TabState } from "./types/tab";
 
 const MIN_ZOOM: number = 0.5;
 const MAX_ZOOM: number = 2.5;
@@ -84,75 +82,71 @@ const DEFAULT_DATE_WIDTH: number = 0.16;
 
 const DEFAULT_SIGNATURE_WIDTH: number = 0.25;
 
-const EMPTY_FORM_FIELDS: ReadonlyArray<FormField> = [];
-
 export function App() {
   const {
-    pdf,
-    isLoading,
-    error,
-    passwordPrompt,
-    openFile,
-    submitPassword,
-    cancelPasswordPrompt,
-    closeFile,
-  } = usePdfDocument();
-  const {
-    annotations,
-    selectedId,
-    selectAnnotation,
-    addAnnotation,
-    updateAnnotation,
-    removeAnnotation,
-    removeAnnotationsForPage,
-    rotateAnnotationsForPage,
-    clearAnnotations,
-  } = useAnnotations();
-  const {
-    operations: pageOperations,
-    resetForPageCount,
-    rotatePage,
-    removePage,
-    movePageUp,
-    movePageDown,
-  } = usePageOperations();
+    tabs,
+    activeId,
+    activeTab,
+    createEmptyTab,
+    closeTab,
+    activateTab,
+    activateAtIndex,
+    openFileInActiveTab,
+    openFileInNewTab,
+    submitActivePassword,
+    cancelActivePasswordPrompt,
+    closeActiveFile,
+    setActivePendingPlacement,
+    addActiveAnnotation,
+    updateActiveAnnotation,
+    removeActiveAnnotation,
+    selectActiveAnnotation,
+    rotateActivePage,
+    removeActivePage,
+    moveActivePageUp,
+    moveActivePageDown,
+    setActiveFormText,
+    setActiveFormCheckbox,
+    setActiveFormRadio,
+    setActiveFormDropdown,
+    setActiveFormListbox,
+    setActiveZoom,
+    toggleActiveSidebar,
+    hasActiveFormEdits,
+  } = useTabs();
   const {
     signatures: savedSignatures,
     saveSignature,
     removeSignature,
   } = useSavedSignatures();
-  const formFields: ReadonlyArray<FormField> = pdf?.formFields ?? EMPTY_FORM_FIELDS;
-  const {
-    values: formValues,
-    isDirty: hasFormEdits,
-    setText: setFormText,
-    setCheckbox: setFormCheckbox,
-    setRadio: setFormRadio,
-    setDropdown: setFormDropdown,
-    setListbox: setFormListbox,
-  } = useFormValues({ fields: formFields });
-  const [zoom, setZoom] = useState<number>(DEFAULT_ZOOM);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
-  const [pendingPlacement, setPendingPlacement] =
-    useState<PendingPlacement | null>(null);
-  const [isSignatureModalOpen, setIsSignatureModalOpen] =
-    useState<boolean>(false);
+
+  const pdf = activeTab.pdf;
+  const annotations = activeTab.annotations;
+  const pageOperations = activeTab.pageOperations;
+  const formValues = activeTab.formValues;
+  const selectedId = activeTab.selectedAnnotationId;
+  const pendingPlacement = activeTab.pendingPlacement;
+  const zoom = activeTab.zoom;
+  const isSidebarOpen = activeTab.isSidebarOpen;
+  const passwordPrompt = activeTab.passwordPrompt;
+  const isLoadingActive = activeTab.status === 'loading';
+  const activeError = activeTab.errorMessage;
+
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportingCompression, setExportingCompression] =
     useState<ExportCompression | null>(null);
   const [isMergeModalOpen, setIsMergeModalOpen] = useState<boolean>(false);
   const [mergingMode, setMergingMode] = useState<MergeMode | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
-  const [isCompressModalOpen, setIsCompressModalOpen] =
-    useState<boolean>(false);
-  const [compressingMode, setCompressingMode] = useState<CompressMode | null>(
-    null,
-  );
+  const [isCompressModalOpen, setIsCompressModalOpen] = useState<boolean>(false);
+  const [compressingMode, setCompressingMode] = useState<CompressMode | null>(null);
   const [compressError, setCompressError] = useState<string | null>(null);
   const [isProtectModalOpen, setIsProtectModalOpen] = useState<boolean>(false);
   const [isProtecting, setIsProtecting] = useState<boolean>(false);
   const [protectError, setProtectError] = useState<string | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  const newTabInputRef = useRef<HTMLInputElement | null>(null);
 
   const pendingTool: ToolbarTool | null = useMemo(
     () => resolvePendingTool(pendingPlacement),
@@ -165,20 +159,34 @@ export function App() {
   );
 
   const canExport: boolean =
-    annotations.length > 0 || hasPageEdits || hasFormEdits;
-
-  useEffect(() => {
-    resetForPageCount(pdf?.pageSizes.length ?? 0);
-  }, [pdf, resetForPageCount]);
+    annotations.length > 0 || hasPageEdits || hasActiveFormEdits;
 
   const handleOpenFile = useCallback(
     async (file: File): Promise<void> => {
-      clearAnnotations();
-      setPendingPlacement(null);
-      await openFile(file);
+      await openFileInActiveTab(file);
     },
-    [clearAnnotations, openFile],
+    [openFileInActiveTab],
   );
+
+  const handleOpenInNewTab = useCallback(
+    (file: File): void => {
+      void openFileInNewTab(file);
+    },
+    [openFileInNewTab],
+  );
+
+  const triggerNewTabFilePicker = useCallback((): void => {
+    newTabInputRef.current?.click();
+  }, []);
+
+  const handleNewTabClick = useCallback((): void => {
+    if (activeTab.status === 'empty') {
+      triggerNewTabFilePicker();
+      return;
+    }
+    createEmptyTab();
+    triggerNewTabFilePicker();
+  }, [activeTab.status, createEmptyTab, triggerNewTabFilePicker]);
 
   const handleReplaceFile = useCallback((): void => {
     replaceInputRef.current?.click();
@@ -187,49 +195,70 @@ export function App() {
   const handleReplaceChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>): void => {
       const file: File | undefined = event.target.files?.[0];
-      event.target.value = "";
+      event.target.value = '';
       if (!file) return;
       void handleOpenFile(file);
     },
     [handleOpenFile],
   );
 
+  const handleNewTabFileChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>): void => {
+      const files: FileList | null = event.target.files;
+      event.target.value = '';
+      if (!files || files.length === 0) return;
+      for (let i: number = 0; i < files.length; i += 1) {
+        const file: File | null = files.item(i);
+        if (!file) continue;
+        if (i === 0 && activeTab.status === 'empty') {
+          void handleOpenFile(file);
+        } else {
+          handleOpenInNewTab(file);
+        }
+      }
+    },
+    [activeTab.status, handleOpenFile, handleOpenInNewTab],
+  );
+
   const handleActivateText = useCallback((): void => {
-    setPendingPlacement({ kind: "text" });
-  }, []);
+    setActivePendingPlacement({ kind: 'text' });
+  }, [setActivePendingPlacement]);
 
   const handleActivateDate = useCallback((): void => {
     const placement: PendingTextPlacement = {
-      kind: "text",
+      kind: 'text',
       initialText: formatDateDdMmYyyy(new Date()),
     };
-    setPendingPlacement(placement);
-  }, []);
+    setActivePendingPlacement(placement);
+  }, [setActivePendingPlacement]);
 
   const handleActivateSignature = useCallback((): void => {
     setIsSignatureModalOpen(true);
   }, []);
 
-  const handleActivateShape = useCallback((shape: ShapeKind): void => {
-    const placement: PendingShapePlacement = { kind: "shape", shape };
-    setPendingPlacement(placement);
-  }, []);
+  const handleActivateShape = useCallback(
+    (shape: ShapeKind): void => {
+      const placement: PendingShapePlacement = { kind: 'shape', shape };
+      setActivePendingPlacement(placement);
+    },
+    [setActivePendingPlacement],
+  );
 
   const handleCancelPlacement = useCallback((): void => {
-    setPendingPlacement(null);
-  }, []);
+    setActivePendingPlacement(null);
+  }, [setActivePendingPlacement]);
 
   const handleSignatureConfirm = useCallback(
     (result: { dataUrl: string; aspectRatio: number }): void => {
       setIsSignatureModalOpen(false);
       const placement: PendingSignaturePlacement = {
-        kind: "signature",
+        kind: 'signature',
         dataUrl: result.dataUrl,
         aspectRatio: result.aspectRatio,
       };
-      setPendingPlacement(placement);
+      setActivePendingPlacement(placement);
     },
-    [],
+    [setActivePendingPlacement],
   );
 
   const handlePlaceAt = useCallback(
@@ -256,36 +285,16 @@ export function App() {
         yFraction,
         pageAspectRatio: displayedWidth / displayedHeight,
       });
-      addAnnotation(annotation);
-      setPendingPlacement(null);
+      addActiveAnnotation(annotation);
     },
-    [addAnnotation, pageOperations, pdf, pendingPlacement],
+    [addActiveAnnotation, pageOperations, pdf, pendingPlacement],
   );
 
   const handleUpdate = useCallback(
     (id: string, patch: Partial<Annotation>): void => {
-      updateAnnotation(id, patch);
+      updateActiveAnnotation(id, patch);
     },
-    [updateAnnotation],
-  );
-
-  const handleRotatePage = useCallback(
-    (displayIndex: number): void => {
-      const event = rotatePage(displayIndex);
-      if (!event) return;
-      const delta = (event.nextRotation - event.previousRotation + 360) % 360;
-      rotateAnnotationsForPage(event.originalIndex, delta as 0 | 90 | 180 | 270);
-    },
-    [rotatePage, rotateAnnotationsForPage],
-  );
-
-  const handleRemovePage = useCallback(
-    (displayIndex: number): void => {
-      const event = removePage(displayIndex);
-      if (!event) return;
-      removeAnnotationsForPage(event.originalIndex);
-    },
-    [removePage, removeAnnotationsForPage],
+    [updateActiveAnnotation],
   );
 
   const handleExport = useCallback(
@@ -294,21 +303,21 @@ export function App() {
       setIsExporting(true);
       setExportingCompression(compression);
       try {
-        const { exportPdf } = await import("./lib/export-pdf");
+        const { exportPdf } = await import('./lib/export-pdf');
         const exportedBytes: Uint8Array = await exportPdf({
           sourceBytes: pdf.sourceBytes,
           annotations,
           pageOperations,
           formValues,
         });
-        if (compression === "none") {
+        if (compression === 'none') {
           deliverExportDownload({
             bytes: exportedBytes,
             sourceName: pdf.fileName,
           });
           return;
         }
-        const { compressPdfBytes } = await import("./lib/compress-pdf");
+        const { compressPdfBytes } = await import('./lib/compress-pdf');
         const result: CompressPdfResult = await compressPdfBytes({
           bytes: exportedBytes,
           level: compression,
@@ -346,7 +355,7 @@ export function App() {
       setIsProtecting(true);
       setProtectError(null);
       try {
-        const { exportPdf } = await import("./lib/export-pdf");
+        const { exportPdf } = await import('./lib/export-pdf');
         const exportedBytes: Uint8Array = await exportPdf({
           sourceBytes: pdf.sourceBytes,
           annotations,
@@ -358,7 +367,7 @@ export function App() {
           compression,
           sourceLabel: pdf.fileName,
         });
-        const { protectPdfBytes } = await import("./lib/protect-pdf");
+        const { protectPdfBytes } = await import('./lib/protect-pdf');
         const protectedBytes: Uint8Array = await protectPdfBytes({
           bytes: compressed.bytes,
           userPassword: password,
@@ -373,7 +382,7 @@ export function App() {
         setProtectError(
           err instanceof Error
             ? err.message
-            : "Failed to protect PDF with password.",
+            : 'Failed to protect PDF with password.',
         );
       } finally {
         setIsProtecting(false);
@@ -398,10 +407,10 @@ export function App() {
       setMergingMode(mode);
       setMergeError(null);
       try {
-        const { mergePdfs } = await import("./lib/merge-pdfs");
+        const { mergePdfs } = await import('./lib/merge-pdfs');
         const bytes: Uint8Array = await mergePdfs({ files });
         const mergedName: string = buildMergedFileName(files);
-        if (mode === "download") {
+        if (mode === 'download') {
           deliverMergedDownload({ bytes, mergedName });
         } else {
           await openMergedForEditing({
@@ -413,7 +422,7 @@ export function App() {
         setIsMergeModalOpen(false);
       } catch (err) {
         setMergeError(
-          err instanceof Error ? err.message : "Failed to merge PDFs",
+          err instanceof Error ? err.message : 'Failed to merge PDFs',
         );
       } finally {
         setMergingMode(null);
@@ -442,10 +451,10 @@ export function App() {
       setCompressingMode(mode);
       setCompressError(null);
       try {
-        const { compressPdf } = await import("./lib/compress-pdf");
+        const { compressPdf } = await import('./lib/compress-pdf');
         const result: CompressPdfResult = await compressPdf({ file, level });
         const compressedName: string = buildCompressedFileName(file.name);
-        if (mode === "download") {
+        if (mode === 'download') {
           deliverCompressedDownload({
             bytes: result.bytes,
             compressedName,
@@ -462,7 +471,7 @@ export function App() {
         setIsCompressModalOpen(false);
       } catch (err) {
         setCompressError(
-          err instanceof Error ? err.message : "Failed to compress PDF",
+          err instanceof Error ? err.message : 'Failed to compress PDF',
         );
       } finally {
         setCompressingMode(null);
@@ -472,18 +481,25 @@ export function App() {
   );
 
   const handleZoomIn = useCallback((): void => {
-    setZoom((z) => clamp(z + ZOOM_STEP, MIN_ZOOM, MAX_ZOOM));
-  }, []);
+    setActiveZoom((z) => clamp(z + ZOOM_STEP, MIN_ZOOM, MAX_ZOOM));
+  }, [setActiveZoom]);
   const handleZoomOut = useCallback((): void => {
-    setZoom((z) => clamp(z - ZOOM_STEP, MIN_ZOOM, MAX_ZOOM));
-  }, []);
+    setActiveZoom((z) => clamp(z - ZOOM_STEP, MIN_ZOOM, MAX_ZOOM));
+  }, [setActiveZoom]);
   const handleResetZoom = useCallback((): void => {
-    setZoom(DEFAULT_ZOOM);
-  }, []);
+    setActiveZoom(DEFAULT_ZOOM);
+  }, [setActiveZoom]);
 
-  const handleToggleSidebar = useCallback((): void => {
-    setIsSidebarOpen((open) => !open);
-  }, []);
+  const handleCloseActiveTab = useCallback((): void => {
+    closeTab(activeId);
+  }, [activeId, closeTab]);
+
+  useGlobalTabShortcuts({
+    onNewTab: handleNewTabClick,
+    onCloseActiveTab: handleCloseActiveTab,
+    onActivateIndex: activateAtIndex,
+    tabsLength: tabs.length,
+  });
 
   return (
     <div className="flex min-h-full flex-col">
@@ -499,12 +515,20 @@ export function App() {
         onOpenMerge={handleOpenMerge}
         onOpenCompress={handleOpenCompress}
       />
+      <TabBar
+        tabs={tabs}
+        activeId={activeId}
+        onActivate={activateTab}
+        onClose={closeTab}
+        onNewTab={handleNewTabClick}
+        onOpenFileInNewTab={handleOpenInNewTab}
+      />
       {pdf && (
         <Toolbar
           pendingTool={pendingTool}
           zoom={zoom}
           isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={handleToggleSidebar}
+          onToggleSidebar={toggleActiveSidebar}
           onActivateText={handleActivateText}
           onActivateDate={handleActivateDate}
           onActivateSignature={handleActivateSignature}
@@ -518,6 +542,7 @@ export function App() {
       <main className="flex flex-1 flex-col">
         {pdf ? (
           <PdfViewer
+            key={activeId}
             pdf={pdf}
             pageOperations={pageOperations}
             zoom={zoom}
@@ -526,27 +551,27 @@ export function App() {
             selectedId={selectedId}
             pendingPlacement={pendingPlacement}
             isSidebarOpen={isSidebarOpen}
-            onSelect={selectAnnotation}
+            onSelect={selectActiveAnnotation}
             onPlaceAt={handlePlaceAt}
             onUpdate={handleUpdate}
-            onDelete={removeAnnotation}
-            onRotatePage={handleRotatePage}
-            onRemovePage={handleRemovePage}
-            onMovePageUp={movePageUp}
-            onMovePageDown={movePageDown}
-            onSetFormText={setFormText}
-            onSetFormCheckbox={setFormCheckbox}
-            onSetFormRadio={setFormRadio}
-            onSetFormDropdown={setFormDropdown}
-            onSetFormListbox={setFormListbox}
+            onDelete={removeActiveAnnotation}
+            onRotatePage={rotateActivePage}
+            onRemovePage={removeActivePage}
+            onMovePageUp={moveActivePageUp}
+            onMovePageDown={moveActivePageDown}
+            onSetFormText={setActiveFormText}
+            onSetFormCheckbox={setActiveFormCheckbox}
+            onSetFormRadio={setActiveFormRadio}
+            onSetFormDropdown={setActiveFormDropdown}
+            onSetFormListbox={setActiveFormListbox}
           />
         ) : (
           <EmptyState
             onOpenFile={handleOpenFile}
             onOpenMerge={handleOpenMerge}
             onOpenCompress={handleOpenCompress}
-            errorMessage={error}
-            isLoading={isLoading}
+            errorMessage={activeError}
+            isLoading={isLoadingActive}
           />
         )}
       </main>
@@ -600,8 +625,8 @@ export function App() {
             isIncorrect={passwordPrompt.isIncorrect}
             isSubmitting={passwordPrompt.isSubmitting}
             errorMessage={passwordPrompt.errorMessage}
-            onSubmit={(password) => void submitPassword(password)}
-            onCancel={cancelPasswordPrompt}
+            onSubmit={(password) => void submitActivePassword(password)}
+            onCancel={cancelActivePasswordPrompt}
           />
         )}
       </Suspense>
@@ -611,6 +636,14 @@ export function App() {
         accept="application/pdf"
         className="hidden"
         onChange={handleReplaceChange}
+      />
+      <input
+        ref={newTabInputRef}
+        type="file"
+        accept="application/pdf"
+        multiple
+        className="hidden"
+        onChange={handleNewTabFileChange}
       />
       <footer className="border-t border-slate-200 bg-white py-4 text-xs text-slate-500">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-6 sm:flex-row">
@@ -628,11 +661,11 @@ export function App() {
               <>
                 <span className="text-slate-400">
                   {annotations.length} annotation
-                  {annotations.length === 1 ? "" : "s"} placed
+                  {annotations.length === 1 ? '' : 's'} placed
                 </span>
                 <button
                   type="button"
-                  onClick={closeFile}
+                  onClick={closeActiveFile}
                   className="text-indigo-600 hover:underline"
                 >
                   Close document
@@ -668,6 +701,58 @@ export function App() {
   );
 }
 
+interface UseGlobalTabShortcutsArgs {
+  readonly onNewTab: () => void;
+  readonly onCloseActiveTab: () => void;
+  readonly onActivateIndex: (index: number) => void;
+  readonly tabsLength: number;
+}
+
+function useGlobalTabShortcuts({
+  onNewTab,
+  onCloseActiveTab,
+  onActivateIndex,
+  tabsLength,
+}: UseGlobalTabShortcutsArgs): void {
+  useEffect((): (() => void) => {
+    const handler = (event: KeyboardEvent): void => {
+      const isMod: boolean = event.metaKey || event.ctrlKey;
+      if (!isMod) return;
+      if (event.key.toLowerCase() === 't' && !event.shiftKey) {
+        if (isInsideEditableTarget(event.target)) return;
+        event.preventDefault();
+        onNewTab();
+        return;
+      }
+      if (event.key.toLowerCase() === 'w' && !event.shiftKey) {
+        if (isInsideEditableTarget(event.target)) return;
+        event.preventDefault();
+        onCloseActiveTab();
+        return;
+      }
+      if (event.key >= '1' && event.key <= '9' && !event.shiftKey) {
+        const index: number = Number.parseInt(event.key, 10) - 1;
+        if (index < 0 || index >= tabsLength) return;
+        if (isInsideEditableTarget(event.target)) return;
+        event.preventDefault();
+        onActivateIndex(index);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return (): void => window.removeEventListener('keydown', handler);
+  }, [onNewTab, onCloseActiveTab, onActivateIndex, tabsLength]);
+}
+
+function isInsideEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tagName: string = target.tagName;
+  if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') {
+    return true;
+  }
+  return false;
+}
+
 interface BuildAnnotationArgs {
   readonly placement: PendingPlacement;
   readonly pageIndex: number;
@@ -683,13 +768,13 @@ function buildAnnotation({
   yFraction,
   pageAspectRatio,
 }: BuildAnnotationArgs): Annotation {
-  if (placement.kind === "text") {
-    const initialText: string = placement.initialText ?? "";
+  if (placement.kind === 'text') {
+    const initialText: string = placement.initialText ?? '';
     const width: number =
       initialText.length > 0 ? DEFAULT_DATE_WIDTH : DEFAULT_TEXT_WIDTH;
     return {
       id: createId(),
-      kind: "text",
+      kind: 'text',
       pageIndex,
       x: clamp(xFraction, 0, 1 - width),
       y: clamp(yFraction, 0, 1 - DEFAULT_TEXT_HEIGHT),
@@ -700,13 +785,13 @@ function buildAnnotation({
       color: DEFAULT_TEXT_COLOR,
     };
   }
-  if (placement.kind === "signature") {
+  if (placement.kind === 'signature') {
     const widthFraction: number = DEFAULT_SIGNATURE_WIDTH;
     const heightFraction: number =
       (widthFraction * pageAspectRatio) / placement.aspectRatio;
     return {
       id: createId(),
-      kind: "signature",
+      kind: 'signature',
       pageIndex,
       x: clamp(xFraction - widthFraction / 2, 0, 1 - widthFraction),
       y: clamp(yFraction - heightFraction / 2, 0, 1 - heightFraction),
@@ -721,7 +806,7 @@ function buildAnnotation({
     (widthFraction * pageAspectRatio) / definition.visualAspectRatio;
   return {
     id: createId(),
-    kind: "shape",
+    kind: 'shape',
     shape: placement.shape,
     pageIndex,
     x: clamp(xFraction - widthFraction / 2, 0, 1 - widthFraction),
@@ -737,6 +822,7 @@ function hasPageOperationChanges(
   operations: ReadonlyArray<{ readonly originalIndex: number; readonly rotation: number }>,
   sourcePageCount: number,
 ): boolean {
+  if (sourcePageCount === 0) return false;
   if (operations.length !== sourcePageCount) return true;
   for (let i: number = 0; i < operations.length; i += 1) {
     const op = operations[i];
@@ -751,20 +837,20 @@ function resolvePendingTool(
   placement: PendingPlacement | null,
 ): ToolbarTool | null {
   if (!placement) return null;
-  if (placement.kind === "signature") return "signature";
-  if (placement.kind === "shape") return placement.shape;
-  return placement.initialText !== undefined ? "date" : "text";
+  if (placement.kind === 'signature') return 'signature';
+  if (placement.kind === 'shape') return placement.shape;
+  return placement.initialText !== undefined ? 'date' : 'text';
 }
 
 function buildExportFileName(sourceName: string): string {
-  const withoutExt: string = sourceName.replace(/\.pdf$/i, "");
+  const withoutExt: string = sourceName.replace(/\.pdf$/i, '');
   return `${withoutExt}-edited.pdf`;
 }
 
 function buildMergedFileName(files: ReadonlyArray<File>): string {
   const first: File | undefined = files[0];
-  if (!first) return "merged.pdf";
-  const baseName: string = first.name.replace(/\.pdf$/i, "");
+  if (!first) return 'merged.pdf';
+  const baseName: string = first.name.replace(/\.pdf$/i, '');
   return `${baseName}-merged.pdf`;
 }
 
@@ -779,7 +865,7 @@ function deliverExportDownload({
 }: DeliverExportDownloadArgs): void {
   const exportedName: string = buildExportFileName(sourceName);
   const blob: Blob = new Blob([bytes as BlobPart], {
-    type: "application/pdf",
+    type: 'application/pdf',
   });
   const resultPromise: Promise<DownloadResult> = awaitDownloadResult({
     fallbackFileName: exportedName,
@@ -799,7 +885,7 @@ function deliverCompressedExportDownload({
 }: DeliverCompressedExportDownloadArgs): void {
   const exportedName: string = buildCompressedExportFileName(sourceName);
   const blob: Blob = new Blob([result.bytes as BlobPart], {
-    type: "application/pdf",
+    type: 'application/pdf',
   });
   const resultPromise: Promise<DownloadResult> = awaitDownloadResult({
     fallbackFileName: exportedName,
@@ -815,7 +901,7 @@ function deliverCompressedExportDownload({
 }
 
 function buildCompressedExportFileName(sourceName: string): string {
-  const baseName: string = sourceName.replace(/\.pdf$/i, "");
+  const baseName: string = sourceName.replace(/\.pdf$/i, '');
   return `${baseName}-edited-compressed.pdf`;
 }
 
@@ -835,10 +921,10 @@ async function maybeCompressExport({
   compression,
   sourceLabel,
 }: MaybeCompressExportArgs): Promise<CompressedExport> {
-  if (compression === "none") {
+  if (compression === 'none') {
     return { bytes, isCompressed: false };
   }
-  const { compressPdfBytes } = await import("./lib/compress-pdf");
+  const { compressPdfBytes } = await import('./lib/compress-pdf');
   const result: CompressPdfResult = await compressPdfBytes({
     bytes,
     level: compression,
@@ -863,7 +949,7 @@ function deliverProtectedExportDownload({
     isCompressed,
   });
   const blob: Blob = new Blob([bytes as BlobPart], {
-    type: "application/pdf",
+    type: 'application/pdf',
   });
   const resultPromise: Promise<DownloadResult> = awaitDownloadResult({
     fallbackFileName: exportedName,
@@ -881,8 +967,8 @@ function buildProtectedExportFileName({
   sourceName,
   isCompressed,
 }: BuildProtectedExportFileNameArgs): string {
-  const baseName: string = sourceName.replace(/\.pdf$/i, "");
-  const middle: string = isCompressed ? "-edited-compressed" : "-edited";
+  const baseName: string = sourceName.replace(/\.pdf$/i, '');
+  const middle: string = isCompressed ? '-edited-compressed' : '-edited';
   return `${baseName}${middle}-protected.pdf`;
 }
 
@@ -896,7 +982,7 @@ function deliverMergedDownload({
   mergedName,
 }: DeliverMergedDownloadArgs): void {
   const blob: Blob = new Blob([bytes as BlobPart], {
-    type: "application/pdf",
+    type: 'application/pdf',
   });
   const resultPromise: Promise<DownloadResult> = awaitDownloadResult({
     fallbackFileName: mergedName,
@@ -917,13 +1003,13 @@ async function openMergedForEditing({
   openFile,
 }: OpenMergedForEditingArgs): Promise<void> {
   const file: File = new File([bytes as BlobPart], mergedName, {
-    type: "application/pdf",
+    type: 'application/pdf',
   });
   await openFile(file);
 }
 
 function buildCompressedFileName(sourceName: string): string {
-  const baseName: string = sourceName.replace(/\.pdf$/i, "");
+  const baseName: string = sourceName.replace(/\.pdf$/i, '');
   return `${baseName}-compressed.pdf`;
 }
 
@@ -941,7 +1027,7 @@ function deliverCompressedDownload({
   compressedSize,
 }: DeliverCompressedDownloadArgs): void {
   const blob: Blob = new Blob([bytes as BlobPart], {
-    type: "application/pdf",
+    type: 'application/pdf',
   });
   const resultPromise: Promise<DownloadResult> = awaitDownloadResult({
     fallbackFileName: compressedName,
@@ -964,7 +1050,7 @@ async function openCompressedForEditing({
   openFile,
 }: OpenCompressedForEditingArgs): Promise<void> {
   const file: File = new File([bytes as BlobPart], compressedName, {
-    type: "application/pdf",
+    type: 'application/pdf',
   });
   await openFile(file);
 }
@@ -980,14 +1066,14 @@ function notifyCompressDownloadResult({
   originalSize,
   compressedSize,
 }: NotifyCompressDownloadResultArgs): void {
-  if (result.state !== "completed") {
+  if (result.state !== 'completed') {
     notifyDownloadResult(result);
     return;
   }
   const savedBytes: number = Math.max(0, originalSize - compressedSize);
   const ratio: number =
     originalSize > 0 ? Math.round((savedBytes / originalSize) * 100) : 0;
-  toast.success("PDF compressed successfully", {
+  toast.success('PDF compressed successfully', {
     description: `${formatBytes(originalSize)} -> ${formatBytes(
       compressedSize,
     )} (${ratio}% smaller)`,
@@ -995,17 +1081,17 @@ function notifyCompressDownloadResult({
 }
 
 function notifyDownloadResult(result: DownloadResult): void {
-  if (result.state === "completed") {
-    toast.success("PDF downloaded successfully", {
+  if (result.state === 'completed') {
+    toast.success('PDF downloaded successfully', {
       description: result.savedPath ?? result.fileName,
     });
     return;
   }
-  if (result.state === "cancelled") {
-    toast.info("Download cancelled");
+  if (result.state === 'cancelled') {
+    toast.info('Download cancelled');
     return;
   }
-  toast.error("Download interrupted");
+  toast.error('Download interrupted');
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1014,3 +1100,7 @@ function clamp(value: number, min: number, max: number): number {
   if (value > max) return max;
   return value;
 }
+
+// `TabState` is exported via the type module so any future devtools panel can
+// inspect tabs structurally without re-deriving the shape.
+export type { TabState };
