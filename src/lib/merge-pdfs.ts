@@ -32,7 +32,7 @@ async function appendFilePages({
   const bytes: ArrayBuffer = await file.arrayBuffer();
   let source: PDFDocument;
   try {
-    source = await PDFDocument.load(bytes);
+    source = await PDFDocument.load(bytes, { ignoreEncryption: true });
   } catch {
     throw new Error(`Could not read "${file.name}". Is it a valid PDF?`);
   }

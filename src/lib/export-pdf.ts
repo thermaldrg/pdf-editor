@@ -35,6 +35,7 @@ export async function exportPdf({
 }: ExportPdfArgs): Promise<Uint8Array> {
   const sourceDocument: PDFDocument = await PDFDocument.load(
     sourceBytes.slice(0),
+    { ignoreEncryption: true },
   );
   applyFormFieldValues({ document: sourceDocument, values: formValues });
   const outputDocument: PDFDocument = await PDFDocument.create();
