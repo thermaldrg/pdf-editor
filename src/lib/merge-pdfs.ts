@@ -1,5 +1,6 @@
 import { PDFDocument } from 'pdf-lib';
 import type { PDFPage } from 'pdf-lib';
+import { loadPdfLibDocument } from './load-pdf-lib-document';
 
 interface MergePdfsArgs {
   readonly files: ReadonlyArray<File>;
@@ -32,7 +33,7 @@ async function appendFilePages({
   const bytes: ArrayBuffer = await file.arrayBuffer();
   let source: PDFDocument;
   try {
-    source = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    source = await loadPdfLibDocument({ bytes });
   } catch {
     throw new Error(`Could not read "${file.name}". Is it a valid PDF?`);
   }

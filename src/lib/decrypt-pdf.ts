@@ -1,4 +1,5 @@
 import { PDF } from '@libpdf/core';
+import { toUnsharedBytes } from './to-unshared-bytes';
 
 interface DecryptPdfBytesArgs {
   readonly bytes: ArrayBuffer | Uint8Array;
@@ -55,13 +56,4 @@ export async function decryptPdfBytes({
     throw new CannotEditProtectedPdfError();
   }
   return document.save();
-}
-
-function toUnsharedBytes(input: ArrayBuffer | Uint8Array): Uint8Array {
-  if (input instanceof Uint8Array) {
-    const copy: Uint8Array = new Uint8Array(input.byteLength);
-    copy.set(input);
-    return copy;
-  }
-  return new Uint8Array(input.slice(0));
 }

@@ -1,5 +1,6 @@
 import { LineCapStyle, PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
 import type { PDFFont, PDFImage, PDFPage } from 'pdf-lib';
+import { loadPdfLibDocument } from './load-pdf-lib-document';
 import type {
   Annotation,
   ShapeAnnotation,
@@ -33,10 +34,9 @@ export async function exportPdf({
   pageOperations,
   formValues = EMPTY_FORM_VALUES,
 }: ExportPdfArgs): Promise<Uint8Array> {
-  const sourceDocument: PDFDocument = await PDFDocument.load(
-    sourceBytes.slice(0),
-    { ignoreEncryption: true },
-  );
+  const sourceDocument: PDFDocument = await loadPdfLibDocument({
+    bytes: sourceBytes,
+  });
   applyFormFieldValues({ document: sourceDocument, values: formValues });
   const outputDocument: PDFDocument = await PDFDocument.create();
   const font: PDFFont = await outputDocument.embedFont(StandardFonts.Helvetica);
